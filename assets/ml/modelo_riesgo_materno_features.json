@@ -1,0 +1,54 @@
+{
+  "nombre_modelo": "modelo_riesgo_materno",
+  "version": "2.0",
+  "descripcion": "Clasificador de riesgo materno (tercer trimestre) entrenado con LightGBM y exportado a ONNX.",
+  "n_features": 30,
+  "feature_names_orden": [
+    "Edad_Materna",
+    "Semanas_Gestacion",
+    "Numero_Embarazos",
+    "Cesarea_Previa",
+    "Diabetes",
+    "Hipertension_Previa",
+    "Preeclampsia_Previa",
+    "Anemia_Gestacional",
+    "Presion_Basal_Sistolica",
+    "Presion_Basal_Diastolica",
+    "Presion_Sistolica",
+    "Presion_Diastolica",
+    "Taquicardia_Sostenida",
+    "Cefalea_Intensa",
+    "Alteracion_Visual",
+    "Zumbido_Oidos",
+    "Dolor_Hipocondrio_Derecho",
+    "Dolor_Boca_Estomago",
+    "Hinchazon_Cara_Manos",
+    "Sangrado_Vaginal",
+    "Mareo_Desmayo",
+    "Sudoracion_Fria",
+    "Fiebre_Escalofrios",
+    "Hipotermia_Subjetiva",
+    "Flujo_Vaginal_Fetido",
+    "Dolor_Abdominal_Bajo",
+    "Perdida_Liquido_Amniotico",
+    "Confusion_Somnolencia",
+    "Movimientos_Fetales_Disminuidos",
+    "Dificultad_Respirar"
+  ],
+  "class_to_id": {
+    "Riesgo_Bajo": 0,
+    "Riesgo_Medio": 1,
+    "Riesgo_Alto": 2
+  },
+  "id_to_class": {
+    "0": "Riesgo_Bajo",
+    "1": "Riesgo_Medio",
+    "2": "Riesgo_Alto"
+  },
+  "input_tensor": "input",
+  "output_names": [
+    "label",
+    "probabilities"
+  ],
+  "nota": "La app debe construir el vector de entrada respetando EXACTAMENTE el orden de 'feature_names_orden'. Todos los valores deben enviarse como float32."
+}

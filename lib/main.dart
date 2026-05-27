@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/inicio_screen.dart'; 
+//import 'screens/prediccion_screen.dart';
 
 void main() {
   runApp(const MiAppTesis());
