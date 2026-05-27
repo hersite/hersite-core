@@ -62,7 +62,7 @@ class RiesgoMaternoModel {
     final inputName = metadata['input_tensor'] as String;
     final outputNames = List<String>.from(metadata['output_names']);
     final idToClass = Map<String, dynamic>.from(metadata['id_to_class']);
-    final mensajes = Map<String, dynamic>.from(metadata['mensajes']);
+    //final mensajes = Map<String, dynamic>.from(metadata['mensajes']);
 
     final nFeatures = metadata['n_features'] as int;
 
@@ -91,7 +91,7 @@ class RiesgoMaternoModel {
 
     final predictedId = (labelRaw.first as num).toInt();
     final predictedClass = idToClass[predictedId.toString()] as String;
-    final mensaje = mensajes[predictedClass] as String;
+   //final mensaje = mensajes[predictedClass] as String;
 
     inputTensor.dispose();
 
@@ -102,7 +102,7 @@ class RiesgoMaternoModel {
     return {
       'predicted_id': predictedId,
       'nivel_riesgo': predictedClass,
-      'mensaje': mensaje,
+    //  'mensaje': mensaje,
       'probabilidades': probaRaw,
     };
   }
