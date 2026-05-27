@@ -69,7 +69,8 @@ class InicioRegistrarse extends StatelessWidget {
                     style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                 ),
-                ElevatedButton(
+                
+                ElevatedButton()
                   onPressed: () {
                     Navigator.push(
                       context,
