@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/test_model_screen.dart';
 
 class InicioRegistrarse extends StatelessWidget {
   const InicioRegistrarse({super.key});
@@ -68,6 +69,17 @@ class InicioRegistrarse extends StatelessWidget {
                     style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                 ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TestModelScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Probar modelo ML'),
+                )
               ),
             ],
           ),
