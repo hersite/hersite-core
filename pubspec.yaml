@@ -31,7 +31,7 @@ flutter:
   assets:
     - img/logo_tesis.png
     - assets/ml/modelo_riesgo_materno (1).onnx
-    - assets/modelo_riesgo_materno_features.json
+    - assets/ml/modelo_riesgo_materno_features.json
     - assets/ml/caso_prueba_flutter.json
 
 
