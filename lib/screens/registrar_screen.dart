@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/test_model_screen.dart';
+import 'test_model_screen.dart';
 
 class InicioRegistrarse extends StatelessWidget {
   const InicioRegistrarse({super.key});
@@ -54,33 +54,39 @@ class InicioRegistrarse extends StatelessWidget {
 
               // Botón Final (Regresa al inicio)
               Center(
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Esto saca al usuario de esta pantalla y lo lleva al Inicio
-                    Navigator.of(context).pop(); 
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4C924F),
-                    minimumSize: const Size(200, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: const Text(
-                    'Crear cuenta',
-                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                
-                ElevatedButton()
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const TestModelScreen(),
+                child: Column( // Envolví los botones en un Column para que no haya error de layout
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        // Esto saca al usuario de esta pantalla y lo lleva al Inicio
+                        Navigator.of(context).pop(); 
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4C924F),
+                        minimumSize: const Size(200, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                    );
-                  },
-                  child: const Text('Probar modelo ML'),
-                )
+                      child: const Text(
+                        'Crear cuenta',
+                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 12),
+
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const TestModelScreen(),
+                          ),
+                        );
+                      },
+                      child: const Text('Probar modelo ML'),
+                    )
+                  ],
+                ),
               ),
             ],
           ),
