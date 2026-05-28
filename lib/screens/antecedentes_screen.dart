@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/perfil_gestante_temp.dart';
 import 'home_screen.dart';
 
 class AntecedentesScreen extends StatefulWidget {
@@ -10,6 +11,8 @@ class AntecedentesScreen extends StatefulWidget {
 
 class _AntecedentesScreenState extends State<AntecedentesScreen> {
   // 1. Controladores para las variables numéricas
+  final TextEditingController _edadCtrl = TextEditingController();
+  final TextEditingController _semanasGestacionCtrl = TextEditingController();
   final TextEditingController _embarazosCtrl = TextEditingController();
   final TextEditingController _sistolicaBasalCtrl = TextEditingController();
   final TextEditingController _diastolicaBasalCtrl = TextEditingController();
@@ -34,12 +37,14 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
   void _guardarYContinuar() {
     // Validación de que los campos numéricos no estén vacíos
-    if (_embarazosCtrl.text.isEmpty ||
+    if (_edadCtrl.text.isEmpty ||
+        _semanasGestacionCtrl.text.isEmpty ||
+        _embarazosCtrl.text.isEmpty ||
         _sistolicaBasalCtrl.text.isEmpty ||
         _diastolicaBasalCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor ingresa tus valores base arriba.'),
+          content: Text('Por favor completa edad, semanas de gestación, embarazos y presión basal.'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -58,11 +63,60 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     }
 
     // Aquí ya tienes todo listo para tu modelo ML:
-    print("Num Embarazos: ${_embarazosCtrl.text}");
-    print("Sistólica Basal: ${_sistolicaBasalCtrl.text}");
-    print("Diastólica Basal: ${_diastolicaBasalCtrl.text}");
-    print("Condiciones (0 a 4): $_respuestas");
+    final edad = int.tryParse(_edadCtrl.text.trim());
+    final semanasGestacion = int.tryParse(_semanasGestacionCtrl.text.trim());
+    final numeroEmbarazos = int.tryParse(_embarazosCtrl.text.trim());
+    final presionBasalSistolica = int.tryParse(_sistolicaBasalCtrl.text.trim());
+    final presionBasalDiastolica = int.tryParse(_diastolicaBasalCtrl.text.trim());
 
+    if (edad == null ||
+        semanasGestacion == null ||
+        numeroEmbarazos == null ||
+        presionBasalSistolica == null ||
+        presionBasalDiastolica == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verifica que los valores numéricos sean correctos.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (edad < 12 || edad > 50) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ingresa una edad materna válida.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (semanasGestacion < 28 || semanasGestacion > 42) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este prototipo está enfocado en gestantes del tercer trimestre. Ingresa semanas entre 28 y 42.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    PerfilGestanteTemp.guardar({
+      'Edad_Materna': edad,
+      'Semanas_Gestacion': semanasGestacion,
+      'Numero_Embarazos': numeroEmbarazos,
+      'Cesarea_Previa': _respuestas[0] == true ? 1 : 0,
+      'Diabetes': _respuestas[1] == true ? 1 : 0,
+      'Hipertension_Previa': _respuestas[2] == true ? 1 : 0,
+      'Preeclampsia_Previa': _respuestas[3] == true ? 1 : 0,
+      'Anemia_Gestacional': _respuestas[4] == true ? 1 : 0,
+      'Presion_Basal_Sistolica': presionBasalSistolica,
+      'Presion_Basal_Diastolica': presionBasalDiastolica,
+    });
+
+    print('Perfil guardado temporalmente: ${PerfilGestanteTemp.obtener()}');
     // Regresamos al Perfil de forma segura
     Navigator.pushReplacement(
       context,
@@ -70,6 +124,16 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
         builder: (context) => const Home(),
       ), // Esto limpia la pila y pone al Home como pantalla principal
     );
+  }
+
+  @override
+  void dispose() {
+    _edadCtrl.dispose();
+    _semanasGestacionCtrl.dispose();
+    _embarazosCtrl.dispose();
+    _sistolicaBasalCtrl.dispose();
+    _diastolicaBasalCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -193,6 +257,73 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'Poltawski Nowy',
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFFB9BAB9),
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Edad materna',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF434C43),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _edadCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Ej. 25',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFFB9BAB9),
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Semanas de gestación',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF434C43),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _semanasGestacionCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Ej. 34',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 15),

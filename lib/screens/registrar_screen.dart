@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'test_model_screen.dart';
-import 'antecedentes_Screen.dart';
+import 'antecedentes_screen.dart';
 
 class InicioRegistrarse extends StatelessWidget {
   const InicioRegistrarse({super.key});

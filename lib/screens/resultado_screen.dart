@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 
 class ResultadoScreen extends StatelessWidget {
   final List<String> sintomasDetectados;
+  //agregué esto: 
+  final String nivelRiesgo;
+  final String mensajeModelo;
+  final dynamic probabilidades;
 
   const ResultadoScreen({
     super.key,
     required this.sintomasDetectados,
+    required this.nivelRiesgo,
+    required this.mensajeModelo,
+    this.probabilidades,
   });
 
   @override
@@ -14,7 +21,7 @@ class ResultadoScreen extends StatelessWidget {
     // 🔴🟡🟢 AQUÍ CAMBIAS LA PALABRA PARA PROBAR 
     // Escribe 'Alto', 'Medio' o 'Bajo'
     // ==========================================
-    String nivelRiesgo = 'Bajo'; // <-- CAMBIA AQUÍ PARA PROBAR LOS COLORES Y MENSAJES
+    //String nivelRiesgo = 'Bajo'; // <-- CAMBIA AQUÍ PARA PROBAR LOS COLORES Y MENSAJES
 
     // --- VARIABLES DINÁMICAS SEGÚN EL RIESGO ---
     Color colorFondo = Colors.white;
@@ -25,21 +32,21 @@ class ResultadoScreen extends StatelessWidget {
     List<String> pasos = [];
 
     // LÓGICA DEL SEMÁFORO Y COLORES
-    if (nivelRiesgo == 'Alto') {
+    if (nivelRiesgo == 'Riesgo_Alto') {
       colorFondo = const Color(0xFFFCE4E4); // Rojo clarito
       colorBorde = const Color(0xFFD33232); // Rojo fuerte
       colorTexto = const Color(0xFFAE4B4B); // Rojo texto
       titulo = '¡Atención urgente!';
       descripcion = 'Tus síntomas indican un riesgo alto para ti y tu bebé.\nPor favor acude a la posta de salud hoy.';
       pasos = ['1. No estés sola', '2. Avisa a tu familia', '3. Acude a la posta hoy'];
-    } else if (nivelRiesgo == 'Medio') {
+    } else if (nivelRiesgo == 'Riesgo_Medio') {
       colorFondo = const Color(0xFFFFF7D8); // Amarillo clarito
       colorBorde = const Color(0xFFB69500); // Amarillo fuerte
       colorTexto = const Color(0xFF8A7100); // Amarillo texto
       titulo = 'Precaución: Mantente alerta';
       descripcion = 'Algunos de tus síntomas requieren atención.\nEs recomendable que un profesional te evalúe pronto.';
       pasos = ['1. Reposa sin esfuerzos', '2. Saca una cita médica', '3. Si empeoras, ve a la posta'];
-    } else if (nivelRiesgo == 'Bajo') {
+    } else if (nivelRiesgo == 'Riesgo_Bajo') {
       colorFondo = const Color(0xFFEEFFEF); // Verde clarito
       colorBorde = const Color(0xFF4C924F); // Verde fuerte
       colorTexto = const Color(0xFF306339); // Verde texto
@@ -134,11 +141,34 @@ class ResultadoScreen extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Bajo' ? const Color(0xFF4C924F) : Colors.green.shade100),
+                        Icon(
+                          Icons.circle,
+                          size: 40,
+                          color: nivelRiesgo == 'Riesgo_Bajo'
+                              ? const Color(0xFF4C924F)
+                              : Colors.green.shade100,
+                        ),
+                        const SizedBox(width: 15),
+                        Icon(
+                          Icons.circle,
+                          size: 40,
+                          color: nivelRiesgo == 'Riesgo_Medio'
+                              ? const Color(0xFFF9E37F)
+                              : Colors.yellow.shade100,
+                        ),
+                        const SizedBox(width: 15),
+                        Icon(
+                          Icons.circle,
+                          size: 40,
+                          color: nivelRiesgo == 'Riesgo_Alto'
+                              ? const Color(0xFFD33232)
+                              : Colors.red.shade100,
+                        ),
+                        /*Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Bajo' ? const Color(0xFF4C924F) : Colors.green.shade100),
                         const SizedBox(width: 15),
                         Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Medio' ? const Color(0xFFF9E37F) : Colors.yellow.shade100),
                         const SizedBox(width: 15),
-                        Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Alto' ? const Color(0xFFD33232) : Colors.red.shade100),
+                        Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Alto' ? const Color(0xFFD33232) : Colors.red.shade100),*/
                       ],
                     ),
                   ),
