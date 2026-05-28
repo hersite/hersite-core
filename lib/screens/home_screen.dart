@@ -48,7 +48,7 @@ class Home extends StatelessWidget {
                                 ),
                                 SizedBox(width: 5),
                                 Text(
-                                  'Sincronizada',
+                                  'Modo offline',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,

@@ -76,7 +76,7 @@ class HistorialScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
                   SizedBox(width: 8),
-                  Text('Sincronizada', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 13)),
                 ],
               ),
             ),

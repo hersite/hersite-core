@@ -5,6 +5,16 @@ class PerfilGestanteTemp {
     _perfil = datos;
   }
 
+  static void actualizar(Map<String, dynamic> nuevosDatos) {
+    if (_perfil == null) {
+      _perfil = nuevosDatos;
+    } else {
+      _perfil!.addAll(
+        nuevosDatos,
+      ); // Esto "fusiona" los datos nuevos con los que ya estaban
+    }
+  }
+
   static Map<String, dynamic>? obtener() {
     return _perfil;
   }
