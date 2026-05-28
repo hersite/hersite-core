@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'historial_screen.dart'; // SE AGREGA EL IMPORT DEL HISTORIAL
 
 class ResultadoScreen extends StatelessWidget {
   final List<String> sintomasDetectados;
-  //agregué esto: 
   final String nivelRiesgo;
   final String mensajeModelo;
   final dynamic probabilidades;
@@ -17,12 +17,6 @@ class ResultadoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ==========================================
-    // 🔴🟡🟢 AQUÍ CAMBIAS LA PALABRA PARA PROBAR 
-    // Escribe 'Alto', 'Medio' o 'Bajo'
-    // ==========================================
-    //String nivelRiesgo = 'Bajo'; // <-- CAMBIA AQUÍ PARA PROBAR LOS COLORES Y MENSAJES
-
     // --- VARIABLES DINÁMICAS SEGÚN EL RIESGO ---
     Color colorFondo = Colors.white;
     Color colorBorde = Colors.grey;
@@ -164,11 +158,6 @@ class ResultadoScreen extends StatelessWidget {
                               ? const Color(0xFFD33232)
                               : Colors.red.shade100,
                         ),
-                        /*Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Bajo' ? const Color(0xFF4C924F) : Colors.green.shade100),
-                        const SizedBox(width: 15),
-                        Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Medio' ? const Color(0xFFF9E37F) : Colors.yellow.shade100),
-                        const SizedBox(width: 15),
-                        Icon(Icons.circle, size: 40, color: nivelRiesgo == 'Alto' ? const Color(0xFFD33232) : Colors.red.shade100),*/
                       ],
                     ),
                   ),
@@ -216,7 +205,7 @@ class ResultadoScreen extends StatelessWidget {
                             return Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: colorFondo, // Se pinta del color del riesgo
+                                color: colorFondo,
                                 borderRadius: BorderRadius.circular(15),
                               ),
                               child: Text(
@@ -262,6 +251,7 @@ class ResultadoScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
+                
                 // BOTONES FIJOS
                 Expanded(
                   flex: 5,
@@ -271,7 +261,15 @@ class ResultadoScreen extends StatelessWidget {
                         width: double.infinity,
                         height: 45,
                         child: ElevatedButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            // CONEXIÓN NAVEGACIÓN REAL AL HISTORIAL
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const HistorialScreen(),
+                              ),
+                            );
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF4C924F),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -294,7 +292,7 @@ class ResultadoScreen extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(Icons.phone_in_talk, color: Color(0xFFD33232), size: 18),
-                              SizedBox(width: 4),
+                              const SizedBox(width: 4),
                               Text('Emergencia', style: TextStyle(color: Color(0xFFD33232), fontWeight: FontWeight.bold)),
                             ],
                           ),
