@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'sintomas_screen.dart';
+import 'aprende_screen.dart';
+import 'perfil_screen.dart';
+import 'historial_screen.dart';
 
 class Home extends StatelessWidget {
   const Home({super.key});
@@ -158,9 +161,13 @@ class Home extends StatelessWidget {
                         // FILA 3: Recordatorios y Aprende (Imágenes arriba)
                         Row(
                           children: [
-                            Expanded(child: _tarjetaCuadrada('Recordatorios')),
+                            Expanded(
+                              child: _tarjetaCuadrada(context, 'Recordatorios'),
+                            ),
                             const SizedBox(width: 10),
-                            Expanded(child: _tarjetaCuadrada('Aprende')),
+                            Expanded(
+                              child: _tarjetaCuadrada(context, 'Aprende'),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 25),
@@ -213,6 +220,30 @@ class Home extends StatelessWidget {
         selectedItemColor: Colors.white,
         unselectedItemColor: Colors.white70,
         type: BottomNavigationBarType.fixed,
+        onTap: (index) {
+          if (index == 0) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const Home()),
+            );
+          } else if (index == 1) {
+            // CONECTAMOS EL BOTÓN AL HISTORIAL PASADO
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HistorialScreen()),
+            );
+          } else if (index == 2) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AprendeScreen()),
+            );
+          } else if (index == 3) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PerfilScreen()),
+            );
+          }
+        },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
           BottomNavigationBarItem(
@@ -383,60 +414,71 @@ class Home extends StatelessWidget {
   }
 
   // Tarjetas Recordatorios y Aprende (Espacio de imagen arriba)
-  Widget _tarjetaCuadrada(String titulo) {
-    return Container(
-      height: 120,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-        ],
-      ),
-      child: Column(
-        children: [
-          // -----------------------------------------
-          // AQUÍ VA TU IMAGEN CUADRADA
-          // -----------------------------------------
-          Expanded(
-            flex: 6,
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color:
-                    Colors.grey.shade200, // Quita esto cuando pongas la imagen
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12),
+  // Tarjetas Recordatorios y Aprende (Espacio de imagen arriba)
+  Widget _tarjetaCuadrada(BuildContext context, String titulo) {
+    return GestureDetector(
+      onTap: () {
+        if (titulo == 'Aprende') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AprendeScreen()),
+          );
+        }
+      },
+      child: Container(
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // -----------------------------------------
+            // AQUÍ VA TU IMAGEN CUADRADA
+            // -----------------------------------------
+            Expanded(
+              flex: 6,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors
+                      .grey
+                      .shade200, // Quita esto cuando pongas la imagen
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    'Espacio Imagen',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
                 ),
               ),
-              child: const Center(
+            ),
+            Expanded(
+              flex: 4,
+              child: Center(
                 child: Text(
-                  'Espacio Imagen',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ),
-              // TODO: Cuando tengas la imagen, borra el 'child: Center(...)' y descomenta lo de abajo:
-              // child: ClipRRect(
-              //   borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              //   child: Image.asset('assets/img/tu_imagen_aqui.png', fit: BoxFit.cover),
-              // ),
-            ),
-          ),
-          Expanded(
-            flex: 4,
-            child: Center(
-              child: Text(
-                titulo,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'serif',
+                  titulo,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'serif',
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
