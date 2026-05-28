@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'test_model_screen.dart';
+import 'antecedentes_Screen.dart';
 
 class InicioRegistrarse extends StatelessWidget {
   const InicioRegistrarse({super.key});
@@ -59,7 +60,7 @@ class InicioRegistrarse extends StatelessWidget {
                     ElevatedButton(
                       onPressed: () {
                         // Esto saca al usuario de esta pantalla y lo lleva al Inicio
-                        Navigator.of(context).pop(); 
+                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AntecedentesScreen()));
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF4C924F),
@@ -67,7 +68,7 @@ class InicioRegistrarse extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       child: const Text(
-                        'Crear cuenta',
+                        'Continuar',
                         style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                     ),
