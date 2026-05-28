@@ -6,13 +6,19 @@ plugins {
 
 android {
     namespace = "com.example.hersite_core"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35  // <--- CAMBIADO: Borramos "flutter.compileSdkVersion" y pusimos 34
     ndkVersion = flutter.ndkVersion
+
+    // <--- AGREGADO: Este es el bloque para ignorar los archivos duplicados de IA
+    packagingOptions {
+        pickFirst("**/libonnxruntime.so")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
