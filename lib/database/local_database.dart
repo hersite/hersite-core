@@ -358,6 +358,53 @@ class LocalDatabase {
     return rows.map((row) => EvaluacionRiesgo.fromMapDb(row)).toList();
   }
 
+  Future<List<EvaluacionRiesgo>> listarEvaluacionesPendientesDelPerfilActivo() async {
+    final perfil = await obtenerPerfilActivo();
+
+    if (perfil == null || perfil.id == null) {
+      return [];
+    }
+
+    final db = await database;
+
+    final rows = await db.query(
+      'evaluaciones',
+      where: 'perfil_id = ? AND sync_status = ?',
+      whereArgs: [perfil.id!, 'pendiente'],
+      orderBy: 'fecha_hora ASC',
+    );
+
+    return rows.map((row) => EvaluacionRiesgo.fromMapDb(row)).toList();
+  }
+
+  Future<int> contarEvaluacionesPendientesDelPerfilActivo() async {
+    final perfil = await obtenerPerfilActivo();
+
+    if (perfil == null || perfil.id == null) {
+      return 0;
+    }
+
+    final db = await database;
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS total
+      FROM evaluaciones
+      WHERE perfil_id = ?
+        AND sync_status = ?
+      ''',
+      [perfil.id!, 'pendiente'],
+    );
+
+    final total = rows.first['total'];
+
+    if (total is int) {
+      return total;
+    }
+
+    return int.tryParse(total.toString()) ?? 0;
+  }
+
   Future<void> marcarComoSincronizada(String idLocal) async {
     final db = await database;
 

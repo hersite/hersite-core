@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
 import '../services/pin_security_service.dart';
 import '../services/session_state_service.dart';
+import '../services/connectivity_sync_service.dart';
 import 'home_screen.dart';
 import 'registrar_screen.dart';
 
@@ -191,6 +194,12 @@ class _InicioLoginState extends State<InicioLogin> {
 
       await SessionStateService.instance.setActiveProfileId(perfilSeguro.id!);
       await SessionStateService.instance.markSessionActive();
+
+      unawaited(
+        ConnectivitySyncService.instance.trySyncNow(
+          reason: 'inicio de sesión',
+        ),
+      );
 
       if (!mounted) return;
 

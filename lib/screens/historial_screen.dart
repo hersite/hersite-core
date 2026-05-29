@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 // import 'package:intl/intl.dart'; // Para formatear la fecha bonito. Agrega 'intl: ^0.19.0' a tu pubspec.yaml si no lo tienes
 import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
+import '../services/sync_service.dart';
+import '../services/connectivity_sync_service.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
@@ -16,6 +18,7 @@ class HistorialScreen extends StatefulWidget {
 
 class _HistorialScreenState extends State<HistorialScreen> {
   late Future<List<EvaluacionRiesgo>> _futureEvaluaciones;
+  bool _sincronizando = false;
 
   @override
   void initState() {
@@ -33,6 +36,51 @@ class _HistorialScreenState extends State<HistorialScreen> {
     });
 
     await _futureEvaluaciones;
+  }
+
+  Future<void> _sincronizarPendientes() async {
+    if (_sincronizando) return;
+
+    setState(() {
+      _sincronizando = true;
+    });
+
+    try {
+      final totalSincronizadas =
+          await SyncService.instance.sincronizarEvaluacionesPendientesDelPerfilActivo();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            totalSincronizadas == 0
+                ? 'No hay evaluaciones pendientes por sincronizar.'
+                : 'Se sincronizaron $totalSincronizadas evaluación(es).',
+          ),
+          backgroundColor: const Color(0xFF4C924F),
+        ),
+      );
+
+      setState(() {
+        _cargarEvaluaciones();
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al sincronizar: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sincronizando = false;
+        });
+      }
+    }
   }
 
   // --- LÓGICA DE COLORES SEGÚN TU DISEÑO ---
@@ -152,6 +200,8 @@ class _HistorialScreenState extends State<HistorialScreen> {
           int countMedio = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Medio').length;
           int countAlto = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Alto').length;
 
+          final countPendientes = evaluaciones.where((e) => e.syncStatus == 'pendiente').length;
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -194,12 +244,75 @@ class _HistorialScreenState extends State<HistorialScreen> {
               ),
               const SizedBox(height: 10),
 
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: countPendientes > 0
+                        ? const Color(0xFFFFF7D8)
+                        : const Color(0xFFEEFFEF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: countPendientes > 0
+                          ? const Color(0xFFB69500)
+                          : const Color(0xFF4C924F),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        countPendientes > 0 ? Icons.cloud_upload : Icons.cloud_done,
+                        color: countPendientes > 0
+                            ? const Color(0xFFB69500)
+                            : const Color(0xFF4C924F),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          countPendientes > 0
+                              ? '$countPendientes evaluación(es) pendiente(s) de sincronizar.'
+                              : 'Todas tus evaluaciones están sincronizadas.',
+                          style: TextStyle(
+                            color: countPendientes > 0
+                                ? const Color(0xFF8A7100)
+                                : const Color(0xFF306339),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      if (countPendientes > 0)
+                        TextButton(
+                          onPressed: _sincronizando ? null : _sincronizarPendientes,
+                          child: Text(
+                            _sincronizando ? 'Enviando...' : 'Sincronizar',
+                            style: const TextStyle(
+                              color: Color(0xFF306339),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
               // LISTA SCROLLEABLE DE TARJETAS DESDE SQLITE
               Expanded(
                 child: evaluaciones.isEmpty
                     ? const Center(child: Text('Aún no tienes evaluaciones guardadas.', style: TextStyle(color: Colors.grey)))
                     : RefreshIndicator(
-                        onRefresh: _refrescarEvaluaciones,
+                        onRefresh:() async {
+                          await ConnectivitySyncService.instance.trySyncNow(
+                            reason: 'refresco manual de historial',
+                          );
+                          
+                          await _refrescarEvaluaciones();
+                        },
                         color: const Color(0xFF4C924F),
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 20),

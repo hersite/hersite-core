@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
 import '../services/riesgo_materno_model.dart';
+import '../services/connectivity_sync_service.dart';
 import 'resultado_screen.dart';
 
 class SignosVitalesScreen extends StatefulWidget {
@@ -151,6 +154,12 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
       );
 
       await LocalDatabase.instance.guardarEvaluacion(evaluacion);
+
+      unawaited(
+        ConnectivitySyncService.instance.trySyncNow(
+          reason: 'nueva evaluación guardada',
+        ),
+      );
       // ==========================================
 
       if (!mounted) return;
