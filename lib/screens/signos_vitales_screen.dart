@@ -68,6 +68,11 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
     final presionDiastolica = int.tryParse(_diastolicaCtrl.text.trim());
 
     final perfil = await _obtenerPerfilParaModelo();
+    
+    // ==========================================
+    // PASO 18: IMPRESIONES DE DEBUG COMENTADAS
+    // ==========================================
+    /*
     final evaluaciones = await LocalDatabase.instance.listarEvaluaciones();
 
     print('TOTAL EVALUACIONES GUARDADAS: ${evaluaciones.length}');
@@ -79,6 +84,8 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
       print('Sync: ${e.syncStatus}');
       print('---');
     }
+    */
+    // ==========================================
 
     return {
       ...perfil,

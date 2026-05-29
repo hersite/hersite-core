@@ -1,15 +1,118 @@
 import 'package:flutter/material.dart';
+import '../database/local_database.dart';
+import '../models/perfil_gestante.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
-// Cuando crees   tus nuevas pantallas, importarás aquí:
 import 'antecedentes_screen.dart';
-// import 'editar_perfil_screen.dart';
+import 'historial_screen.dart';
+import 'inicio_screen.dart';
 
-class PerfilScreen extends StatelessWidget {
+class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
 
   @override
+  State<PerfilScreen> createState() => _PerfilScreenState();
+}
+
+class _PerfilScreenState extends State<PerfilScreen> {
+  PerfilGestante? _perfil;
+  bool _cargando = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarPerfil();
+  }
+
+  Future<void> _cargarPerfil() async {
+    try {
+      final perfil = await LocalDatabase.instance.obtenerPerfil();
+
+      if (!mounted) return;
+
+      setState(() {
+        _perfil = perfil;
+        _cargando = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _cargando = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  String _siNo(int valor) {
+    return valor == 1 ? 'Sí' : 'No';
+  }
+
+  String get _nombreVisible {
+    final nombre = _perfil?.nombre.trim();
+    if (nombre == null || nombre.isEmpty) {
+      return 'Gestante';
+    }
+    return nombre;
+  }
+
+  // --- WIDGET AUXILIAR PARA LOS ANTECEDENTES ---
+  Widget _buildDatoMedico(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF434C43)),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF306339),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Control de carga inicial
+    if (_cargando) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFFBFFFB),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF4C924F)),
+        ),
+      );
+    }
+
+    // Control de errores de base de datos
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFFBFFFB),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              'Error cargando perfil:\n$_error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFFBFFFB),
       appBar: AppBar(
@@ -182,28 +285,29 @@ class PerfilScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 15),
-                      const Expanded(
+                      // --- INFORMACIÓN DINÁMICA DESDE SQLITE ---
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Rosa Huamán',
-                              style: TextStyle(
+                              _nombreVisible,
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 fontFamily: 'Poltawski Nowy',
                               ),
                             ),
                             Text(
-                              'DNI: 12345678',
-                              style: TextStyle(
+                              'Edad materna: ${_perfil?.edadMaterna ?? '--'} años',
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
                               ),
                             ),
                             Text(
-                              'Nacimiento: 21/02/2005',
-                              style: TextStyle(
+                              'Semanas de gestación: ${_perfil?.semanasGestacion ?? '--'}',
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
                               ),
@@ -239,22 +343,57 @@ class PerfilScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Mantén tu historial médico actualizado para que la evaluación de síntomas sea más precisa.',
-                    style: TextStyle(fontSize: 13, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 15),
+
+                  // --- RESUMEN DE ANTECEDENTES DINÁMICO ---
+                  if (_perfil != null) ...[
+                    _buildDatoMedico(
+                      'Número de embarazos',
+                      _perfil!.numeroEmbarazos.toString(),
+                    ),
+                    _buildDatoMedico(
+                      'Presión basal',
+                      '${_perfil!.presionBasalSistolica}/${_perfil!.presionBasalDiastolica}',
+                    ),
+                    _buildDatoMedico(
+                      'Cesárea previa',
+                      _siNo(_perfil!.cesareaPrevia),
+                    ),
+                    _buildDatoMedico('Diabetes', _siNo(_perfil!.diabetes)),
+                    _buildDatoMedico(
+                      'Hipertensión previa',
+                      _siNo(_perfil!.hipertensionPrevia),
+                    ),
+                    _buildDatoMedico(
+                      'Pre-eclampsia previa',
+                      _siNo(_perfil!.preeclampsiaPrevia),
+                    ),
+                    _buildDatoMedico(
+                      'Anemia gestacional',
+                      _siNo(_perfil!.anemiaGestacional),
+                    ),
+                    const SizedBox(height: 15),
+                  ] else ...[
+                    const Text(
+                      'Aún no hay antecedentes registrados.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 15),
+                  ],
+
+                  // Botón que recarga al volver
                   SizedBox(
                     width: double.infinity,
                     height: 45,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
+                      onPressed: () async {
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const AntecedentesScreen(),
                           ),
                         );
+                        // Al volver de antecedentes, refresca la vista
+                        _cargarPerfil();
                       },
                       icon: const Icon(
                         Icons.medical_information,
@@ -262,7 +401,7 @@ class PerfilScreen extends StatelessWidget {
                         size: 20,
                       ),
                       label: const Text(
-                        'Registrar mis antecedentes',
+                        'Actualizar mis antecedentes',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -341,12 +480,23 @@ class PerfilScreen extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // BOTÓN CERRAR SESIÓN
+            // ==========================================
+            // BOTÓN CERRAR SESIÓN (CONECTADO AL INICIO)
+            // ==========================================
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: () {
+                  // Destruye todo el historial de pantallas y te manda al login/inicio
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const InicioPrimer(),
+                    ),
+                    (Route<dynamic> route) => false,
+                  );
+                },
                 style: OutlinedButton.styleFrom(
                   backgroundColor: const Color(0xFFFCE4E4),
                   side: const BorderSide(color: Color(0xFFD33232), width: 2),
@@ -370,26 +520,32 @@ class PerfilScreen extends StatelessWidget {
         ),
       ),
 
-      // ==========================================
-      // BARRA INFERIOR (PERFIL SELECCIONADO)
-      // ==========================================
+      // BARRA INFERIOR CON NAVEGACIÓN COMPLETA
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: const Color(0xFF306339),
         selectedItemColor: Colors.white,
         unselectedItemColor: Colors.white70,
         type: BottomNavigationBarType.fixed,
-        currentIndex: 3,
+        currentIndex: 3, // Icono de Perfil Encendido
         onTap: (index) {
           if (index == 0) {
-            Navigator.push(
+            Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const Home()),
             );
+          } else if (index == 1) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HistorialScreen()),
+            );
           } else if (index == 2) {
-            Navigator.push(
+            Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const AprendeScreen()),
             );
+          } else if (index == 3) {
+            // Ya estás en Perfil, podrías recargarlo
+            _cargarPerfil();
           }
         },
         items: const [
