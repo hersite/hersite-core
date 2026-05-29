@@ -5,7 +5,10 @@ import '../models/perfil_gestante.dart';
 import 'home_screen.dart'; 
 
 class AntecedentesScreen extends StatefulWidget {
-  const AntecedentesScreen({super.key});
+  // NUEVO: Bandera para saber si estamos editando o creando por primera vez
+  final bool esEdicion;
+  
+  const AntecedentesScreen({super.key, this.esEdicion = false});
 
   @override
   State<AntecedentesScreen> createState() => _AntecedentesScreenState();
@@ -27,6 +30,34 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
   ];
 
   final Map<int, bool> _respuestas = {};
+
+  @override
+  void initState() {
+    super.initState();
+    // NUEVO: Si estamos en modo edición, cargamos los datos previos
+    if (widget.esEdicion) {
+      _cargarDatosExistentes();
+    }
+  }
+
+  // Función que va a la base de datos y llena los campos visuales
+  Future<void> _cargarDatosExistentes() async {
+    final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+    if (perfilDb != null && mounted) {
+      setState(() {
+        _embarazosCtrl.text = perfilDb.numeroEmbarazos.toString();
+        _sistolicaBasalCtrl.text = perfilDb.presionBasalSistolica.toString();
+        _diastolicaBasalCtrl.text = perfilDb.presionBasalDiastolica.toString();
+        
+        // Convertimos los 1 y 0 a true/false para pintar los botones
+        _respuestas[0] = perfilDb.cesareaPrevia == 1;
+        _respuestas[1] = perfilDb.diabetes == 1;
+        _respuestas[2] = perfilDb.hipertensionPrevia == 1;
+        _respuestas[3] = perfilDb.preeclampsiaPrevia == 1;
+        _respuestas[4] = perfilDb.anemiaGestacional == 1;
+      });
+    }
+  }
 
   void _seleccionarRespuesta(int index, bool respuesta) {
     setState(() {
@@ -85,10 +116,6 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     });
 
     // 2. OBTENEMOS EL MAPA COMPLETO Y LO CONVERTIMOS A MODELO
-    
-    
-    /*final perfilMap = PerfilGestanteTemp.obtener();*/
-
     Map<String, dynamic>? perfilMap = PerfilGestanteTemp.obtener();
 
     if (perfilMap == null || perfilMap['Edad_Materna'] == null || perfilMap['Semanas_Gestacion'] == null) {
@@ -128,13 +155,19 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
       return;
     }
 
-    // 4. AVANZAMOS AL HOME
+    // 4. NAVEGACIÓN DINÁMICA
     if (!mounted) return;
     
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const Home()), 
-    );
+    if (widget.esEdicion) {
+      // Si estaba editando, solo cierra la pantalla y vuelve al Perfil
+      Navigator.pop(context);
+    } else {
+      // Si era registro nuevo, la manda al Home
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const Home()), 
+      );
+    }
   }
 
   @override
@@ -198,20 +231,25 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // AHORA SÍ, LOS TEXTOS ESTÁN DENTRO DEL BODY
-                  const Text('Antecedentes médicos', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
+                  // TÍTULO DINÁMICO
+                  Text(
+                    widget.esEdicion ? 'Editar antecedentes' : 'Antecedentes médicos', 
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')
+                  ),
                   const SizedBox(height: 5),
                   
-                  // MENSAJITO DE PROGRESO
-                  const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Color(0xFF4C924F), size: 18),
-                      SizedBox(width: 5),
-                      Text('Paso 2 de 2: ¡Ya casi terminas!', style: TextStyle(color: Color(0xFF4C924F), fontWeight: FontWeight.bold, fontSize: 14)),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 15),
+                  // MENSAJITO DE PROGRESO (SOLO SE MUESTRA SI ES REGISTRO NUEVO)
+                  if (!widget.esEdicion) ...[
+                    const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Color(0xFF4C924F), size: 18),
+                        SizedBox(width: 5),
+                        Text('Paso 2 de 2: ¡Ya casi terminas!', style: TextStyle(color: Color(0xFF4C924F), fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                  ],
+
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -288,7 +326,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
             ),
           ),
           
-          // BOTÓN GUARDAR Y CONTINUAR
+          // BOTÓN GUARDAR Y CONTINUAR DINÁMICO
           Container(
             padding: const EdgeInsets.all(20),
             color: const Color(0xFFFBFFFB),
@@ -298,7 +336,10 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
               child: ElevatedButton(
                 onPressed: _guardarYContinuar,
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4C924F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                child: const Text('Comenzar a usar la app', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
+                child: Text(
+                  widget.esEdicion ? 'Guardar cambios' : 'Comenzar a usar la app', 
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')
+                ),
               ),
             ),
           ),

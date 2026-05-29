@@ -343,7 +343,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-
+                  
                   // --- RESUMEN DE ANTECEDENTES DINÁMICO ---
                   if (_perfil != null) ...[
                     _buildDatoMedico(
@@ -380,7 +380,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     const SizedBox(height: 15),
                   ],
 
-                  // Botón que recarga al volver
+                  // ==========================================
+                  // MEJORA APLICADA AQUÍ: Modo Edición Activado
+                  // ==========================================
                   SizedBox(
                     width: double.infinity,
                     height: 45,
@@ -389,7 +391,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const AntecedentesScreen(),
+                            // SE ENVÍA esEdicion: true PARA QUE LA PANTALLA SE ADAPTE
+                            builder: (context) => const AntecedentesScreen(esEdicion: true),
                           ),
                         );
                         // Al volver de antecedentes, refresca la vista
@@ -417,6 +420,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       ),
                     ),
                   ),
+                  // ==========================================
                 ],
               ),
             ),
@@ -480,9 +484,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
             ),
             const SizedBox(height: 30),
 
-            // ==========================================
             // BOTÓN CERRAR SESIÓN (CONECTADO AL INICIO)
-            // ==========================================
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -550,14 +552,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.favorite),
-            label: 'Historial',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book),
-            label: 'Aprende',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Historial'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Aprende'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
         ],
       ),
