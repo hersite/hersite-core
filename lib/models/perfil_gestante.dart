@@ -1,5 +1,12 @@
 class PerfilGestante {
+  final int? id;
+
   final String nombre;
+  final String dni;
+  final String celular;
+  final String pinHash;
+  final String pinSalt;
+
   final int edadMaterna;
   final int semanasGestacion;
   final int numeroEmbarazos;
@@ -12,7 +19,12 @@ class PerfilGestante {
   final int presionBasalDiastolica;
 
   const PerfilGestante({
+    this.id,
     required this.nombre,
+    required this.dni,
+    required this.celular,
+    required this.pinHash,
+    required this.pinSalt,
     required this.edadMaterna,
     required this.semanasGestacion,
     required this.numeroEmbarazos,
@@ -28,6 +40,10 @@ class PerfilGestante {
   Map<String, dynamic> toMapDb() {
     return {
       'nombre': nombre,
+      'dni': dni,
+      'celular': celular,
+      'pin_hash': pinHash,
+      'pin_salt': pinSalt,
       'edad_materna': edadMaterna,
       'semanas_gestacion': semanasGestacion,
       'numero_embarazos': numeroEmbarazos,
@@ -43,7 +59,12 @@ class PerfilGestante {
 
   factory PerfilGestante.fromMapDb(Map<String, dynamic> map) {
     return PerfilGestante(
+      id: map['id'] as int?,
       nombre: map['nombre'] as String? ?? '',
+      dni: map['dni'] as String? ?? '',
+      celular: map['celular'] as String? ?? '',
+      pinHash: map['pin_hash'] as String? ?? '',
+      pinSalt: map['pin_salt'] as String? ?? '',
       edadMaterna: map['edad_materna'] as int,
       semanasGestacion: map['semanas_gestacion'] as int,
       numeroEmbarazos: map['numero_embarazos'] as int,
@@ -74,7 +95,12 @@ class PerfilGestante {
 
   factory PerfilGestante.fromTempMap(Map<String, dynamic> map) {
     return PerfilGestante(
+      id: map['IdPerfil'] as int?,
       nombre: map['Nombre'] as String? ?? '',
+      dni: map['DNI'] as String? ?? '',
+      celular: map['Celular'] as String? ?? '',
+      pinHash: map['PinHash'] as String? ?? '',
+      pinSalt: map['PinSalt'] as String? ?? '',
       edadMaterna: map['Edad_Materna'] as int,
       semanasGestacion: map['Semanas_Gestacion'] as int,
       numeroEmbarazos: map['Numero_Embarazos'] as int,

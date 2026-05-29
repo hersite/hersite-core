@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
+import '../services/session_state_service.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
 import 'antecedentes_screen.dart';
 import 'historial_screen.dart';
 import 'inicio_screen.dart';
+
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -81,6 +84,51 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _cerrarSesionSegura() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Cerrar sesión'),
+          content: const Text(
+            'Se cerrará la sesión actual. Tus datos locales cifrados se conservarán y podrás ingresar nuevamente con tu PIN.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Cerrar sesión',
+                style: TextStyle(color: Color(0xFF970A0A)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    // Limpia solo memoria temporal del flujo.
+    PerfilGestanteTemp.limpiar();
+
+    // Marca la sesión como cerrada.
+    await SessionStateService.instance.markSessionClosed();
+
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const InicioPrimer(),
+      ),
+      (Route<dynamic> route) => false,
     );
   }
 
@@ -490,6 +538,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
               child: TextButton(
                 onPressed: () async {
                   await LocalDatabase.instance.eliminarTodo();
+                  await SessionStateService.instance.clearSessionStateForDevOnly();
+                  PerfilGestanteTemp.limpiar();
 
                   if (!context.mounted) return;
 
@@ -519,16 +569,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
               width: double.infinity,
               height: 50,
               child: OutlinedButton(
-                onPressed: () {
+                onPressed: _cerrarSesionSegura,
                   // Destruye todo el historial de pantallas y te manda al login/inicio
-                  Navigator.pushAndRemoveUntil(
+                  /*Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const InicioPrimer(),
                     ),
                     (Route<dynamic> route) => false,
                   );
-                },
+                },*/
                 style: OutlinedButton.styleFrom(
                   backgroundColor: const Color(0xFFFCE4E4),
                   side: const BorderSide(color: Color(0xFFD33232), width: 2),

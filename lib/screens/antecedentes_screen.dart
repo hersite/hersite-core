@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
+import '../services/session_state_service.dart';
 import 'home_screen.dart'; 
 
 class AntecedentesScreen extends StatefulWidget {
@@ -123,7 +124,12 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
       if (perfilDb != null) {
         PerfilGestanteTemp.actualizar({
+          'IdPerfil': perfilDb.id,
           'Nombre': perfilDb.nombre,
+          'DNI': perfilDb.dni,
+          'Celular': perfilDb.celular,
+          'PinHash': perfilDb.pinHash,
+          'PinSalt': perfilDb.pinSalt,
           ...perfilDb.toModelInput(),
         });
 
@@ -141,11 +147,24 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
       return;
     }
 
+    if ((perfilMap['PinHash'] as String? ?? '').isEmpty ||
+        (perfilMap['PinSalt'] as String? ?? '').isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se encontró el PIN de registro. Vuelve a iniciar el registro.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final perfil = PerfilGestante.fromTempMap(perfilMap);
 
     // 3. GUARDAMOS EN SQLITE
     try {
-      await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
+      final perfilId = await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
+      await SessionStateService.instance.setActiveProfileId(perfilId);
+      await SessionStateService.instance.markSessionActive();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

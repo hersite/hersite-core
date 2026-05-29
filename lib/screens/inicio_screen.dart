@@ -31,7 +31,7 @@ class InicioPrimer extends StatelessWidget {
                   SizedBox(
                     width: double.infinity, height: 50,
                     child: ElevatedButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const InicioLogin())),
+                      onPressed: () {Navigator.push(context, MaterialPageRoute(builder: (context) => const InicioLogin(modoCuentaActiva: false)));},
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF316533)),
                       child: const Text('INGRESAR', style: TextStyle(color: Colors.white, fontSize: 22)),
                     ),

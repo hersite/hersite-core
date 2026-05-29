@@ -2,6 +2,7 @@ import 'dart:convert';
 
 class EvaluacionRiesgo {
   final String idLocal;
+  final int perfilId;
   final String fechaHora;
   final Map<String, dynamic> formData;
   final List<String> sintomasDetectados;
@@ -12,6 +13,7 @@ class EvaluacionRiesgo {
 
   const EvaluacionRiesgo({
     required this.idLocal,
+    required this.perfilId,
     required this.fechaHora,
     required this.formData,
     required this.sintomasDetectados,
@@ -24,6 +26,7 @@ class EvaluacionRiesgo {
   Map<String, dynamic> toMapDb() {
     return {
       'id_local': idLocal,
+      'perfil_id': perfilId,
       'fecha_hora': fechaHora,
       'form_data_json': jsonEncode(formData),
       'sintomas_detectados_json': jsonEncode(sintomasDetectados),
@@ -38,6 +41,7 @@ class EvaluacionRiesgo {
   factory EvaluacionRiesgo.fromMapDb(Map<String, dynamic> map) {
     return EvaluacionRiesgo(
       idLocal: map['id_local'] as String,
+      perfilId: map['perfil_id'] as int? ?? 0,
       fechaHora: map['fecha_hora'] as String,
       formData: jsonDecode(map['form_data_json'] as String) as Map<String, dynamic>,
       sintomasDetectados: List<String>.from(
