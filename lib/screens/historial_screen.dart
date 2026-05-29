@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Para formatear la fecha bonito. Agrega 'intl: ^0.19.0' a tu pubspec.yaml si no lo tienes
+import 'package:flutter/material.dart';// Para formatear la fecha bonito. Agrega 'intl: ^0.19.0' a tu pubspec.yaml si no lo tienes
 import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
 import 'home_screen.dart';
@@ -24,6 +23,14 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
   void _cargarEvaluaciones() {
     _futureEvaluaciones = LocalDatabase.instance.listarEvaluaciones();
+  }
+
+  Future<void> _refrescarEvaluaciones() async {
+    setState(() {
+      _cargarEvaluaciones();
+    });
+
+    await _futureEvaluaciones;
   }
 
   // --- LÓGICA DE COLORES SEGÚN TU DISEÑO ---
@@ -190,7 +197,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
                 child: evaluaciones.isEmpty
                     ? const Center(child: Text('Aún no tienes evaluaciones guardadas.', style: TextStyle(color: Colors.grey)))
                     : RefreshIndicator(
-                        onRefresh: () async => _cargarEvaluaciones(),
+                        onRefresh: _refrescarEvaluaciones,
                         color: const Color(0xFF4C924F),
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 20),

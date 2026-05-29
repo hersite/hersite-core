@@ -85,9 +85,26 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     });
 
     // 2. OBTENEMOS EL MAPA COMPLETO Y LO CONVERTIMOS A MODELO
-    final perfilMap = PerfilGestanteTemp.obtener();
+    
+    
+    /*final perfilMap = PerfilGestanteTemp.obtener();*/
 
-    if (perfilMap == null) {
+    Map<String, dynamic>? perfilMap = PerfilGestanteTemp.obtener();
+
+    if (perfilMap == null || perfilMap['Edad_Materna'] == null || perfilMap['Semanas_Gestacion'] == null) {
+      final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+
+      if (perfilDb != null) {
+        PerfilGestanteTemp.actualizar({
+          'Nombre': perfilDb.nombre,
+          ...perfilDb.toModelInput(),
+        });
+
+        perfilMap = PerfilGestanteTemp.obtener();
+      }
+    }
+
+    if (perfilMap == null || perfilMap['Edad_Materna'] == null || perfilMap['Semanas_Gestacion'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No se encontró el perfil temporal de la gestante.'),

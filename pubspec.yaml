@@ -38,5 +38,4 @@ flutter:
     - assets/ml/modelo_riesgo_materno.onnx
     - assets/ml/modelo_riesgo_materno_features.json
     - assets/ml/caso_prueba_flutter.json
-
-
+    

@@ -161,8 +161,16 @@ class RiesgoMaternoModel {
     final labelRaw = await outputs[labelOutputName]!.asList();
     final probaRaw = await outputs[probaOutputName]!.asList();
 
-    final predictedId = (labelRaw.first as num).toInt();
+    final rawValue = labelRaw.first;
+
+    final predictedId = rawValue is num
+        ? rawValue.toInt()
+        : int.parse(rawValue.toString());
+
     final predictedClass = idToClass[predictedId.toString()] as String;
+
+    /*final predictedId = (labelRaw.first as num).toInt();
+    final predictedClass = idToClass[predictedId.toString()] as String;*/
     
     final mensaje = _mensajePorRiesgo(predictedClass);
 

@@ -148,7 +148,7 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
                   Container(
                     width: 80, height: 80,
                     decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF316533), width: 2)),
-                    child: ClipOval(child: Image.asset('assets/img/logo_tesis.png', fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pregnant_woman, size: 40, color: Color(0xFF316533)))),
+                    child: ClipOval(child: Image.asset('img/logo_tesis.png', fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pregnant_woman, size: 40, color: Color(0xFF316533)))),
                   ),
                 ],
               ),
