@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/inicio_screen.dart'; 
-//import 'screens/prediccion_screen.dart';
+import 'screens/app_entry_gate.dart';
 
 void main() {
   runApp(const MiAppTesis());
@@ -14,7 +13,7 @@ class MiAppTesis extends StatelessWidget {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'App Gestantes',
-      home: InicioPrimer(), 
+      home: AppEntryGate(),
     );
   }
 }

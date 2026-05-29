@@ -2,21 +2,18 @@ class PerfilGestanteTemp {
   static Map<String, dynamic>? _perfil;
 
   static void guardar(Map<String, dynamic> datos) {
-    _perfil = datos;
+    _perfil = Map<String, dynamic>.from(datos);
   }
 
   static void actualizar(Map<String, dynamic> nuevosDatos) {
-    if (_perfil == null) {
-      _perfil = nuevosDatos;
-    } else {
-      _perfil!.addAll(
-        nuevosDatos,
-      ); // Esto "fusiona" los datos nuevos con los que ya estaban
-    }
+    _perfil = {
+      ...?_perfil,
+      ...nuevosDatos,
+    };
   }
 
   static Map<String, dynamic>? obtener() {
-    return _perfil;
+    return _perfil == null ? null : Map<String, dynamic>.from(_perfil!);
   }
 
   static bool get existePerfil => _perfil != null;
@@ -26,8 +23,6 @@ class PerfilGestanteTemp {
   }
 
   static Map<String, dynamic> obtenerParaModelo() {
-    // Valores por defecto solo para evitar que la app se rompa
-    // si alguien entra directo al flujo sin registrarse.
     return _perfil ??
         {
           'Edad_Materna': 25,

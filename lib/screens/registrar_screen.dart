@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'test_model_screen.dart';
 import 'antecedentes_screen.dart';
 import '../data/perfil_gestante_temp.dart';
+import '../services/pin_security_service.dart';
+import '../database/local_database.dart';
 
 class InicioRegistrarse extends StatefulWidget {
   const InicioRegistrarse({super.key});
@@ -62,7 +64,7 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
     }
   }
 
-  void _continuar() {
+  /*void _continuar() {
     // 1. Validamos que haya seleccionado fecha y escrito las semanas
     final semanas = int.tryParse(_semanasCtrl.text.trim());
 
@@ -116,7 +118,134 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
       context,
       MaterialPageRoute(builder: (context) => const AntecedentesScreen()),
     );
+  }*/
+
+  Future <void> _continuar() async {
+    final nombre = _nombreCtrl.text.trim();
+    final dni = _dniCtrl.text.trim();
+    final celular = _celularCtrl.text.trim();
+    final pin = _pinCtrl.text.trim();
+
+    final semanas = int.tryParse(_semanasCtrl.text.trim());
+
+    if (nombre.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, ingresa tu nombre completo.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (dni.length != 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El DNI debe tener 8 dígitos.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final perfilExistente = await LocalDatabase.instance.obtenerPerfilPorDni(dni);
+
+    if (perfilExistente != null) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ya existe una cuenta local registrada con este DNI. Ingresa con tu PIN.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (celular.length != 9) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El celular debe tener 9 dígitos.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (pin.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El PIN debe tener 6 dígitos.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (_fechaSeleccionada == null || semanas == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, selecciona tu fecha de nacimiento y semanas de gestación.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final hoy = DateTime.now();
+
+    var edadCalculada = hoy.year - _fechaSeleccionada!.year;
+
+    if (hoy.month < _fechaSeleccionada!.month ||
+        (hoy.month == _fechaSeleccionada!.month &&
+            hoy.day < _fechaSeleccionada!.day)) {
+      edadCalculada--;
+    }
+
+    if (edadCalculada < 12 || edadCalculada > 55) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La edad calculada no está en un rango válido para el registro.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (semanas < 1 || semanas > 42) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Las semanas de gestación deben estar entre 1 y 42.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final pinSalt = PinSecurityService.instance.generateSalt();
+    final pinHash = PinSecurityService.instance.hashPin(
+      pin: pin,
+      salt: pinSalt,
+    );
+
+    PerfilGestanteTemp.actualizar({
+      'Nombre': nombre,
+      'DNI': dni,
+      'Celular': celular,
+      'PinHash': pinHash,
+      'PinSalt': pinSalt,
+      'Edad_Materna': edadCalculada,
+      'Semanas_Gestacion': semanas,
+    });
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AntecedentesScreen(),
+      ),
+    );
   }
+  
 
   @override
   Widget build(BuildContext context) {
