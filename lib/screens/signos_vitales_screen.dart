@@ -68,6 +68,11 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
     final presionDiastolica = int.tryParse(_diastolicaCtrl.text.trim());
 
     final perfil = await _obtenerPerfilParaModelo();
+    
+    // ==========================================
+    // PASO 18: IMPRESIONES DE DEBUG COMENTADAS
+    // ==========================================
+    /*
     final evaluaciones = await LocalDatabase.instance.listarEvaluaciones();
 
     print('TOTAL EVALUACIONES GUARDADAS: ${evaluaciones.length}');
@@ -79,6 +84,8 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
       print('Sync: ${e.syncStatus}');
       print('---');
     }
+    */
+    // ==========================================
 
     return {
       ...perfil,
@@ -114,6 +121,12 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
       final formData = await _buildFormData();
       print('FORM DATA ENVIADO AL MODELO: $formData');
 
+      final perfilActivo = await LocalDatabase.instance.obtenerPerfil();
+
+      if (perfilActivo == null || perfilActivo.id == null) {
+        throw Exception('No hay una cuenta activa para asociar la evaluación.');
+      }
+      
       await _model.load();
 
       final resultado = await _model.predictFromMap(formData);
@@ -127,6 +140,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
 
       final evaluacion = EvaluacionRiesgo(
         idLocal: idLocal,
+        perfilId: perfilActivo.id!,
         fechaHora: now,
         formData: formData,
         sintomasDetectados: sintomasDetectados,

@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';// Para formatear la fecha bonito. Agrega 'intl: ^0.19.0' a tu pubspec.yaml si no lo tienes
+import 'package:flutter/material.dart';
+// import 'package:intl/intl.dart'; // Para formatear la fecha bonito. Agrega 'intl: ^0.19.0' a tu pubspec.yaml si no lo tienes
 import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
+import 'detalle_evaluacion_screen.dart'; // NUEVO IMPORT AÑADIDO
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -206,54 +208,101 @@ class _HistorialScreenState extends State<HistorialScreen> {
                             final evaluacion = evaluaciones[index];
                             final estilo = _obtenerEstiloPorRiesgo(evaluacion.nivelRiesgo);
 
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 15),
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: estilo['colorFondo'],
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: estilo['colorBorde'], width: 2),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded( // Expanded evita desbordamientos si el texto es largo
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                            // ==========================================
+                            // PASO 5: TARJETA ENVUELTA EN GESTUREDETECTOR
+                            // ==========================================
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => DetalleEvaluacionScreen(
+                                      evaluacion: evaluacion,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 15),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: estilo['colorFondo'],
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: estilo['colorBorde'], width: 2),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            estilo['titulo'],
+                                            style: TextStyle(
+                                              color: estilo['colorTexto'],
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              fontFamily: 'Poltawski Nowy',
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _resumenSintomas(evaluacion.sintomasDetectados),
+                                            style: const TextStyle(
+                                              color: Color(0xFF434C43),
+                                              fontSize: 14,
+                                              fontFamily: 'Poltawski Nowy',
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Toca para ver detalle',
+                                            style: TextStyle(
+                                              color: estilo['colorTexto'],
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          estilo['titulo'],
-                                          style: TextStyle(color: estilo['colorTexto'], fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
+                                          _formatearFecha(evaluacion.fechaHora),
+                                          style: const TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(
-                                          _resumenSintomas(evaluacion.sintomasDetectados),
-                                          style: const TextStyle(color: Color(0xFF434C43), fontSize: 14, fontFamily: 'Poltawski Nowy'),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                        Icon(
+                                          evaluacion.syncStatus == 'sincronizado'
+                                              ? Icons.cloud_done
+                                              : Icons.cloud_off,
+                                          size: 14,
+                                          color: evaluacion.syncStatus == 'sincronizado'
+                                              ? const Color(0xFF4C924F)
+                                              : Colors.grey,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        const Icon(
+                                          Icons.chevron_right,
+                                          color: Colors.grey,
+                                          size: 20,
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        _formatearFecha(evaluacion.fechaHora),
-                                        style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
-                                      ),
-                                      // Pequeño indicador de sync
-                                      const SizedBox(height: 4),
-                                      Icon(
-                                        evaluacion.syncStatus == 'sincronizado' ? Icons.cloud_done : Icons.cloud_off,
-                                        size: 14,
-                                        color: evaluacion.syncStatus == 'sincronizado' ? const Color(0xFF4C924F) : Colors.grey,
-                                      )
-                                    ],
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             );
+                            // ==========================================
                           },
                         ),
                       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; // Importamos la pantalla de Inicio para poder regresar
+import 'home_screen.dart'; // Importamos la pantalla de Inicio
+import 'historial_screen.dart'; // Importamos Historial
+import 'perfil_screen.dart'; // Importamos Perfil
 
 class AprendeScreen extends StatefulWidget {
   const AprendeScreen({super.key});
@@ -160,7 +162,7 @@ class _AprendeScreenState extends State<AprendeScreen> {
         ],
       ),
       // ==========================================
-      // BARRA INFERIOR CON "APRENDE" SELECCIONADO
+      // BARRA INFERIOR CON NAVEGACIÓN COMPLETA
       // ==========================================
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: const Color(0xFF306339),
@@ -170,10 +172,21 @@ class _AprendeScreenState extends State<AprendeScreen> {
         currentIndex: 2, // <--- ESTO ENCIENDE EL TERCER ÍCONO (Aprende)
         onTap: (index) {
           if (index == 0) {
-            // Si tocan "Inicio", regresamos al Home
-            Navigator.push(
+            Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const Home()),
+            );
+          } else if (index == 1) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HistorialScreen()),
+            );
+          } else if (index == 2) {
+            // Ya estás en la pantalla Aprende
+          } else if (index == 3) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const PerfilScreen()),
             );
           }
         },
