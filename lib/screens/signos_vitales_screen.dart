@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import '../data/perfil_gestante_temp.dart';
+import '../database/local_database.dart';
+import '../models/evaluacion_riesgo.dart';
+import '../services/riesgo_materno_model.dart';
 import 'resultado_screen.dart';
 
 class SignosVitalesScreen extends StatefulWidget {
@@ -13,27 +18,164 @@ class SignosVitalesScreen extends StatefulWidget {
 class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
   final TextEditingController _sistolicaCtrl = TextEditingController();
   final TextEditingController _diastolicaCtrl = TextEditingController();
+  final RiesgoMaternoModel _model = RiesgoMaternoModel();
+  bool _analizando = false;
 
-  /* void _analizar() {
-    // Aquí luego uniremos los síntomas con estos números para la IA
-    print("Síntomas previos: ${widget.sintomasSeleccionados}");
-    print("Sistólica: ${_sistolicaCtrl.text}");
-    print("Diastólica: ${_diastolicaCtrl.text}");
-    
-    // Aquí pondremos la navegación a la pantalla de resultados finales
-  } */
+  final List<String> _sintomasList = [
+    'Taquicardia sostenida',
+    'Cefalea intensa',
+    'Alteración visual',
+    'Zumbido oídos',
+    'Dolor hipocondrio derecho',
+    'Dolor boca estómago',
+    'Hinchazón cara manos',
+    'Sangrado vaginal',
+    'Mareo desmayo',
+    'Sudoración fría',
+    'Fiebre escalofríos',
+    'Hipotermia subjetiva',
+    'Flujo vaginal fétido',
+    'Dolor abdominal bajo',
+    'Pérdida líquido amniótico',
+    'Confusión somnolencia',
+    'Movimientos fetales disminuidos',
+    'Dificultad respirar',
+  ];
 
-  void _analizar() {
-    // ESTO ES SOLO PARA PROBAR EL DISEÑO DE LA PANTALLA DE RESULTADOS
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const ResultadoScreen(
-          // Le pasamos unos síntomas falsos para ver cómo se pintan las píldoras
-          sintomasDetectados: ['Visión Borrosa', 'Dolor de cabeza', 'PA Alto'],
+  List<String> _obtenerSintomasDetectados() {
+    return widget.sintomasSeleccionados
+        .map((index) => _sintomasList[index])
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> _obtenerPerfilParaModelo() async {
+    try {
+      final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+      if (perfilDb != null) {
+        return perfilDb.toModelInput();
+      }
+    } catch (e) {
+      debugPrint('Error leyendo perfil de SQLite: $e');
+    }
+
+    return PerfilGestanteTemp.obtenerParaModelo();
+  }
+
+  Future<Map<String, dynamic>> _buildFormData() async {
+    final sintomas = widget.sintomasSeleccionados;
+
+    final presionSistolica = int.tryParse(_sistolicaCtrl.text.trim());
+    final presionDiastolica = int.tryParse(_diastolicaCtrl.text.trim());
+
+    final perfil = await _obtenerPerfilParaModelo();
+    final evaluaciones = await LocalDatabase.instance.listarEvaluaciones();
+
+    print('TOTAL EVALUACIONES GUARDADAS: ${evaluaciones.length}');
+
+    for (final e in evaluaciones) {
+      print('ID: ${e.idLocal}');
+      print('Fecha: ${e.fechaHora}');
+      print('Riesgo: ${e.nivelRiesgo}');
+      print('Sync: ${e.syncStatus}');
+      print('---');
+    }
+
+    return {
+      ...perfil,
+      'Presion_Sistolica': presionSistolica ?? 115,
+      'Presion_Diastolica': presionDiastolica ?? 75,
+      'Taquicardia_Sostenida': sintomas.contains(0) ? 1 : 0,
+      'Cefalea_Intensa': sintomas.contains(1) ? 1 : 0,
+      'Alteracion_Visual': sintomas.contains(2) ? 1 : 0,
+      'Zumbido_Oidos': sintomas.contains(3) ? 1 : 0,
+      'Dolor_Hipocondrio_Derecho': sintomas.contains(4) ? 1 : 0,
+      'Dolor_Boca_Estomago': sintomas.contains(5) ? 1 : 0,
+      'Hinchazon_Cara_Manos': sintomas.contains(6) ? 1 : 0,
+      'Sangrado_Vaginal': sintomas.contains(7) ? 1 : 0,
+      'Mareo_Desmayo': sintomas.contains(8) ? 1 : 0,
+      'Sudoracion_Fria': sintomas.contains(9) ? 1 : 0,
+      'Fiebre_Escalofrios': sintomas.contains(10) ? 1 : 0,
+      'Hipotermia_Subjetiva': sintomas.contains(11) ? 1 : 0,
+      'Flujo_Vaginal_Fetido': sintomas.contains(12) ? 1 : 0,
+      'Dolor_Abdominal_Bajo': sintomas.contains(13) ? 1 : 0,
+      'Perdida_Liquido_Amniotico': sintomas.contains(14) ? 1 : 0,
+      'Confusion_Somnolencia': sintomas.contains(15) ? 1 : 0,
+      'Movimientos_Fetales_Disminuidos': sintomas.contains(16) ? 1 : 0,
+      'Dificultad_Respirar': sintomas.contains(17) ? 1 : 0,
+    };
+  }
+
+  Future<void> _analizar() async {
+    setState(() {
+      _analizando = true;
+    });
+
+    try {
+      final formData = await _buildFormData();
+      print('FORM DATA ENVIADO AL MODELO: $formData');
+
+      await _model.load();
+
+      final resultado = await _model.predictFromMap(formData);
+      final sintomasDetectados = _obtenerSintomasDetectados();
+
+      // ==========================================
+      // GUARDAR EN LA BASE DE DATOS LOCAL
+      // ==========================================
+      final now = DateTime.now().toIso8601String();
+      final idLocal = const Uuid().v4();
+
+      final evaluacion = EvaluacionRiesgo(
+        idLocal: idLocal,
+        fechaHora: now,
+        formData: formData,
+        sintomasDetectados: sintomasDetectados,
+        nivelRiesgo: resultado['nivel_riesgo'] as String,
+        mensaje: resultado['mensaje'] as String,
+        probabilidades: resultado['probabilidades'],
+        syncStatus: 'pendiente',
+      );
+
+      await LocalDatabase.instance.guardarEvaluacion(evaluacion);
+      // ==========================================
+
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ResultadoScreen(
+            nivelRiesgo: resultado['nivel_riesgo'] as String,
+            mensajeModelo: resultado['mensaje'] as String,
+            sintomasDetectados: sintomasDetectados,
+            probabilidades: resultado['probabilidades'],
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al analizar el riesgo: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _analizando = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _sistolicaCtrl.dispose();
+    _diastolicaCtrl.dispose();
+    _model.close();
+    super.dispose();
   }
 
   @override
@@ -61,7 +203,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
                   Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
                   SizedBox(width: 8),
                   Text(
-                    'Sincronizada',
+                    'Modo offline',
                     style: TextStyle(color: Colors.white, fontSize: 13),
                   ),
                 ],
@@ -171,7 +313,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
             ),
             const SizedBox(height: 20),
 
-            // SECCIÓN: PRESIÓN DIASTÓLICA (Abajo, donde iba la temperatura)
+            // SECCIÓN: PRESIÓN DIASTÓLICA
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -238,16 +380,16 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
-                onPressed: _analizar,
+                onPressed: _analizando ? null : _analizar,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF4C924F),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: const Text(
-                  'Analizar',
-                  style: TextStyle(
+                child: Text(
+                  _analizando ? 'Analizando...' : 'Analizar',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.hersite_core"
-    compileSdk = 35  // <--- CAMBIADO: Borramos "flutter.compileSdkVersion" y pusimos 34
+    compileSdk = 36  // <--- CAMBIADO: Borramos "flutter.compileSdkVersion" y pusimos 36 
     ndkVersion = flutter.ndkVersion
 
     // <--- AGREGADO: Este es el bloque para ignorar los archivos duplicados de IA

@@ -30,7 +30,7 @@ class PerfilScreen extends StatelessWidget {
                   Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
                   SizedBox(width: 8),
                   Text(
-                    'Sincronizada',
+                    'Modo offline',
                     style: TextStyle(color: Colors.white, fontSize: 13),
                   ),
                 ],
