@@ -320,8 +320,8 @@ class _HomeState extends State<Home> {
                         SizedBox(
                           width: double.infinity,
                           height: 55,
-                          child: ElevatedButton(
-                            onPressed: () async {
+                          child: ElevatedButton(                            
+                            /*onPressed: () async {
                               // Espera a que termine la evaluación en las siguientes pantallas
                               await Navigator.push(
                                 context,
@@ -331,7 +331,34 @@ class _HomeState extends State<Home> {
                               );
                               // Cuando la usuaria vuelve de ResultadoScreen, el Home se refresca solo
                               _cargarDatosInicio();
+                            },*/
+
+                            onPressed: () async {
+                              final perfil = await LocalDatabase.instance.obtenerPerfil();
+
+                              if (perfil == null) {
+                                if (!context.mounted) return;
+
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Primero registra tus datos y antecedentes médicos.'),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              if (!context.mounted) return;
+
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const SintomasScreen(),
+                                ),
+                              );
+                              _cargarDatosInicio();
                             },
+
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF4C924F),
                               shape: RoundedRectangleBorder(

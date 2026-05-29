@@ -484,6 +484,36 @@ class _PerfilScreenState extends State<PerfilScreen> {
             ),
             const SizedBox(height: 30),
 
+            SizedBox(
+              width: double.infinity,
+              height: 45,
+              child: TextButton(
+                onPressed: () async {
+                  await LocalDatabase.instance.eliminarTodo();
+
+                  if (!context.mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Datos locales eliminados para prueba.'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+
+                  _cargarPerfil();
+                },
+                child: const Text(
+                  'Limpiar datos locales (Dev)',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            
             // BOTÓN CERRAR SESIÓN (CONECTADO AL INICIO)
             SizedBox(
               width: double.infinity,

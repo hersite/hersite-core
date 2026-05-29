@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../models/evaluacion_riesgo.dart';
 import '../models/perfil_gestante.dart';
+import '../services/database_key_service.dart';
 
 class LocalDatabase {
   LocalDatabase._internal();
@@ -20,7 +22,7 @@ class LocalDatabase {
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
+  /*Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'riesgo_materno_local.db');
 
@@ -28,6 +30,38 @@ class LocalDatabase {
       path,
       version: 1,
       onCreate: _onCreate,
+    );
+  }*/
+
+  Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'riesgo_materno_local.db');
+
+    final password =
+        await DatabaseKeyService.instance.getOrCreateDatabasePassword();
+
+    return openDatabase(
+      path,
+      password: password,
+      version: 1,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
+      onCreate: _onCreate,
+      onOpen: (db) async {
+        try {
+          final rows = await db.rawQuery('PRAGMA cipher_version');
+
+          if (rows.isNotEmpty) {
+            final version = rows.first.values.first;
+            debugPrint('SQLCipher activo. Versión: $version');
+          } else {
+            debugPrint('No se pudo confirmar cipher_version.');
+          }
+        } catch (e) {
+          debugPrint('No se pudo leer PRAGMA cipher_version: $e');
+        }
+      },
     );
   }
 
@@ -64,6 +98,19 @@ class LocalDatabase {
         created_at TEXT NOT NULL
       )
     ''');
+  }
+
+
+  Future<String> obtenerVersionSqlCipher() async {
+    final db = await database;
+
+    final rows = await db.rawQuery('PRAGMA cipher_version');
+
+    if (rows.isEmpty) {
+      return 'No disponible';
+    }
+
+    return rows.first.values.first.toString();
   }
 
   // ============================================================

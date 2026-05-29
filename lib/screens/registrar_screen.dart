@@ -178,7 +178,7 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
               ),
               const SizedBox(height: 20),
               
-              _crearCajaTexto('Crea tu PIN (4 dígitos)', '****', _pinCtrl, esNumero: true, ocultar: true),
+              _crearCajaTexto('Crea tu PIN (6 dígitos)', '******', _pinCtrl, esNumero: true, ocultar: true),
               const SizedBox(height: 40),
 
               // Botón Final
