@@ -40,16 +40,27 @@ class SyncService {
           // el envío de datos cuando exista conexión.
           await Future.delayed(const Duration(milliseconds: 350));
 
+          // Este serverId simulado representa el id que en el futuro
+          // devolverá FastAPI/PostgreSQL después de guardar la evaluación.
+          final fakeServerId =
+              'srv_${DateTime.now().millisecondsSinceEpoch}_${evaluacion.idLocal}';
+
           await LocalDatabase.instance.marcarComoSincronizada(
             evaluacion.idLocal,
+            serverId: fakeServerId,
           );
 
           sincronizadas++;
 
           debugPrint(
-            'Evaluación sincronizada: ${evaluacion.idLocal}',
+            'Evaluación sincronizada: ${evaluacion.idLocal} | serverId: $fakeServerId',
           );
         } catch (e) {
+          await LocalDatabase.instance.registrarErrorSincronizacion(
+            evaluacion.idLocal,
+            e.toString(),
+          );
+
           debugPrint(
             'Error sincronizando evaluación ${evaluacion.idLocal}: $e',
           );

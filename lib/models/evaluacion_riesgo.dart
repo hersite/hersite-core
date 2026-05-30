@@ -11,6 +11,11 @@ class EvaluacionRiesgo {
   final dynamic probabilidades;
   final String syncStatus;
 
+  final String? serverId;
+  final String? syncedAt;
+  final int syncAttempts;
+  final String? lastSyncError;
+
   const EvaluacionRiesgo({
     required this.idLocal,
     required this.perfilId,
@@ -21,6 +26,10 @@ class EvaluacionRiesgo {
     required this.mensaje,
     required this.probabilidades,
     required this.syncStatus,
+    this.serverId,
+    this.syncedAt,
+    this.syncAttempts = 0,
+    this.lastSyncError,
   });
 
   Map<String, dynamic> toMapDb() {
@@ -34,11 +43,17 @@ class EvaluacionRiesgo {
       'mensaje': mensaje,
       'probabilidades_json': jsonEncode(probabilidades),
       'sync_status': syncStatus,
+      'server_id': serverId,
+      'synced_at': syncedAt,
+      'sync_attempts': syncAttempts,
+      'last_sync_error': lastSyncError,
       'created_at': fechaHora,
     };
   }
 
   factory EvaluacionRiesgo.fromMapDb(Map<String, dynamic> map) {
+    final syncAttemptsRaw = map['sync_attempts'];
+
     return EvaluacionRiesgo(
       idLocal: map['id_local'] as String,
       perfilId: map['perfil_id'] as int? ?? 0,
@@ -53,6 +68,12 @@ class EvaluacionRiesgo {
           ? null
           : jsonDecode(map['probabilidades_json'] as String),
       syncStatus: map['sync_status'] as String,
+      serverId: map['server_id'] as String?,
+      syncedAt: map['synced_at'] as String?,
+      syncAttempts: syncAttemptsRaw is int
+          ? syncAttemptsRaw
+          : int.tryParse(syncAttemptsRaw?.toString() ?? '') ?? 0,
+      lastSyncError: map['last_sync_error'] as String?,
     );
   }
 }

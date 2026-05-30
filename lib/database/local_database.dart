@@ -33,7 +33,7 @@ class LocalDatabase {
     return openDatabase(
       path,
       password: password,
-      version: 3,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -92,6 +92,10 @@ class LocalDatabase {
         mensaje TEXT NOT NULL,
         probabilidades_json TEXT,
         sync_status TEXT NOT NULL,
+        server_id TEXT,
+        synced_at TEXT,
+        sync_attempts INTEGER NOT NULL DEFAULT 0,
+        last_sync_error TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY(perfil_id) REFERENCES perfil_gestante(id) ON DELETE CASCADE
       )
@@ -170,6 +174,39 @@ class LocalDatabase {
         ON evaluaciones(perfil_id, fecha_hora DESC)
       ''');
     }
+
+    if (oldVersion < 4) {
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'evaluaciones',
+        columnName: 'server_id',
+        definition: 'TEXT',
+      );
+
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'evaluaciones',
+        columnName: 'synced_at',
+        definition: 'TEXT',
+      );
+
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'evaluaciones',
+        columnName: 'sync_attempts',
+        definition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'evaluaciones',
+        columnName: 'last_sync_error',
+        definition: 'TEXT',
+      );
+    }
+
+
+
   }
 
   Future<void> _addColumnIfNotExists(
@@ -405,16 +442,51 @@ class LocalDatabase {
     return int.tryParse(total.toString()) ?? 0;
   }
 
-  Future<void> marcarComoSincronizada(String idLocal) async {
+  Future<void> marcarComoSincronizada(
+    String idLocal, {
+    String? serverId,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.rawUpdate(
+      '''
+      UPDATE evaluaciones
+      SET sync_status = ?,
+          server_id = ?,
+          synced_at = ?,
+          sync_attempts = sync_attempts + 1,
+          last_sync_error = NULL
+      WHERE id_local = ?
+      ''',
+      [
+        'sincronizado',
+        serverId,
+        now,
+        idLocal,
+      ],
+    );
+  }
+
+  Future<void> registrarErrorSincronizacion(
+    String idLocal,
+    String error,
+  ) async {
     final db = await database;
 
-    await db.update(
-      'evaluaciones',
-      {
-        'sync_status': 'sincronizado',
-      },
-      where: 'id_local = ?',
-      whereArgs: [idLocal],
+    await db.rawUpdate(
+      '''
+      UPDATE evaluaciones
+      SET sync_status = ?,
+          sync_attempts = sync_attempts + 1,
+          last_sync_error = ?
+      WHERE id_local = ?
+      ''',
+      [
+        'pendiente',
+        error,
+        idLocal,
+      ],
     );
   }
 
