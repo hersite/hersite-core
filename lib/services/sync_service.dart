@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../database/local_database.dart';
+import 'api_client.dart';
 
 class SyncService {
   SyncService._internal();
@@ -32,28 +33,22 @@ class SyncService {
 
       for (final evaluacion in pendientes) {
         try {
-          // ============================================================
-          // SIMULACIÓN DE ENVÍO A SERVIDOR
-          // ============================================================
-          // Más adelante, aquí irá el POST real hacia FastAPI.
-          // Por ahora se simula una pequeña espera para representar
-          // el envío de datos cuando exista conexión.
-          await Future.delayed(const Duration(milliseconds: 350));
+          final respuesta =
+              await ApiClient.instance.enviarEvaluacionRiesgo(evaluacion);
 
-          // Este serverId simulado representa el id que en el futuro
-          // devolverá FastAPI/PostgreSQL después de guardar la evaluación.
-          final fakeServerId =
-              'srv_${DateTime.now().millisecondsSinceEpoch}_${evaluacion.idLocal}';
+          if (!respuesta.ok) {
+            throw Exception(respuesta.message);
+          }
 
           await LocalDatabase.instance.marcarComoSincronizada(
             evaluacion.idLocal,
-            serverId: fakeServerId,
+            serverId: respuesta.serverId,
           );
 
           sincronizadas++;
 
           debugPrint(
-            'Evaluación sincronizada: ${evaluacion.idLocal} | serverId: $fakeServerId',
+            'Evaluación sincronizada: ${evaluacion.idLocal} | serverId: ${respuesta.serverId}',
           );
         } catch (e) {
           await LocalDatabase.instance.registrarErrorSincronizacion(

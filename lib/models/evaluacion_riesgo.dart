@@ -52,8 +52,6 @@ class EvaluacionRiesgo {
   }
 
   factory EvaluacionRiesgo.fromMapDb(Map<String, dynamic> map) {
-    final syncAttemptsRaw = map['sync_attempts'];
-
     return EvaluacionRiesgo(
       idLocal: map['id_local'] as String,
       perfilId: map['perfil_id'] as int? ?? 0,
@@ -68,12 +66,21 @@ class EvaluacionRiesgo {
           ? null
           : jsonDecode(map['probabilidades_json'] as String),
       syncStatus: map['sync_status'] as String,
-      serverId: map['server_id'] as String?,
-      syncedAt: map['synced_at'] as String?,
-      syncAttempts: syncAttemptsRaw is int
-          ? syncAttemptsRaw
-          : int.tryParse(syncAttemptsRaw?.toString() ?? '') ?? 0,
-      lastSyncError: map['last_sync_error'] as String?,
     );
+  }
+
+  Map<String, dynamic> toApiPayload() {
+    return {
+      'id_local': idLocal,
+      'perfil_id_local': perfilId,
+      'fecha_hora': fechaHora,
+      'form_data': formData,
+      'sintomas_detectados': sintomasDetectados,
+      'nivel_riesgo': nivelRiesgo,
+      'mensaje': mensaje,
+      'probabilidades': probabilidades,
+      'sync_status_local': syncStatus,
+      'origen': 'flutter_offline',
+    };
   }
 }
