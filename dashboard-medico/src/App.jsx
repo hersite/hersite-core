@@ -1,11 +1,13 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Login from './pages/Login';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+
+import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './layouts/Layout';
+
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Configuracion from './pages/Configuracion';
 import Gestantes from './pages/Gestantes';
-import Tendencias from './pages/Tendencias'; // <-- 1. IMPORTAR TENDENCIAS
+import Tendencias from './pages/Tendencias';
 
 function App() {
   return (
@@ -13,12 +15,16 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
 
-        <Route element={<Layout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/configuracion" element={<Configuracion />} />
-          <Route path="/gestantes" element={<Gestantes />} />
-          <Route path="/tendencias" element={<Tendencias />} /> {/* <-- 2. AÑADIR LA RUTA */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/gestantes" element={<Gestantes />} />
+            <Route path="/tendencias" element={<Tendencias />} />
+            <Route path="/configuracion" element={<Configuracion />} />
+          </Route>
         </Route>
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,4 +1,7 @@
+import os
+from collections import Counter
 from contextlib import asynccontextmanager
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -85,6 +88,99 @@ def _evaluacion_to_card(evaluacion: EvaluacionCentral, gestante: Gestante | None
         "gestante": _gestante_to_dict(gestante),
     }
 
+def _parse_fecha_iso(fecha_hora: str):
+    try:
+        return datetime.fromisoformat(fecha_hora)
+    except Exception:
+        return None
+
+
+def _mes_corto(numero_mes: int) -> str:
+    meses = {
+        1: "Ene",
+        2: "Feb",
+        3: "Mar",
+        4: "Abr",
+        5: "May",
+        6: "Jun",
+        7: "Jul",
+        8: "Ago",
+        9: "Sep",
+        10: "Oct",
+        11: "Nov",
+        12: "Dic",
+    }
+
+    return meses.get(numero_mes, "S/F")
+
+
+def _detectar_factores_clinicos(form_data: dict):
+    factores = []
+
+    presion_sistolica = form_data.get("Presion_Sistolica")
+    presion_diastolica = form_data.get("Presion_Diastolica")
+
+    if isinstance(presion_sistolica, int | float) and presion_sistolica >= 140:
+        factores.append("Presión sistólica elevada")
+
+    if isinstance(presion_diastolica, int | float) and presion_diastolica >= 90:
+        factores.append("Presión diastólica elevada")
+
+    if form_data.get("Cefalea_Intensa") == 1:
+        factores.append("Cefalea intensa")
+
+    if form_data.get("Alteracion_Visual") == 1:
+        factores.append("Alteración visual")
+
+    if form_data.get("Zumbido_Oidos") == 1:
+        factores.append("Zumbido de oídos")
+
+    if form_data.get("Dolor_Hipocondrio_Derecho") == 1:
+        factores.append("Dolor en hipocondrio derecho")
+
+    if form_data.get("Dolor_Boca_Estomago") == 1:
+        factores.append("Dolor en boca del estómago")
+
+    if form_data.get("Hinchazon_Cara_Manos") == 1:
+        factores.append("Hinchazón de cara/manos")
+
+    if form_data.get("Sangrado_Vaginal") in [1, "1", "Leve", "Abundante"]:
+        factores.append("Sangrado vaginal")
+
+    if form_data.get("Perdida_Liquido_Amniotico") == 1:
+        factores.append("Pérdida de líquido amniótico")
+
+    if form_data.get("Movimientos_Fetales_Disminuidos") == 1:
+        factores.append("Movimientos fetales disminuidos")
+
+    if form_data.get("Fiebre_Escalofrios") == 1:
+        factores.append("Fiebre o escalofríos")
+
+    if form_data.get("Flujo_Vaginal_Fetido") == 1:
+        factores.append("Flujo vaginal fétido")
+
+    if form_data.get("Dificultad_Respirar") == 1:
+        factores.append("Dificultad para respirar")
+
+    if form_data.get("Confusion_Somnolencia") == 1:
+        factores.append("Confusión o somnolencia")
+
+    if form_data.get("Diabetes") == 1:
+        factores.append("Antecedente de diabetes")
+
+    if form_data.get("Hipertension_Previa") == 1:
+        factores.append("Hipertensión previa")
+
+    if form_data.get("Preeclampsia_Previa") == 1:
+        factores.append("Preeclampsia previa")
+
+    if form_data.get("Anemia_Gestacional") == 1:
+        factores.append("Anemia gestacional")
+
+    if form_data.get("Cesarea_Previa") == 1:
+        factores.append("Cesárea previa")
+
+    return factores
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
@@ -133,6 +229,212 @@ def dashboard_resumen(
         "ultimas_evaluaciones": ultimas_cards,
     }
 
+
+@app.get("/api/tendencias/resumen")
+def tendencias_resumen(
+    session: Session = Depends(get_session),
+):
+    gestantes = session.exec(select(Gestante)).all()
+    evaluaciones = session.exec(select(EvaluacionCentral)).all()
+
+    total_evaluaciones = len(evaluaciones)
+
+    riesgos = {
+        "bajo": 0,
+        "medio": 0,
+        "alto": 0,
+    }
+
+    tendencia_por_mes = {}
+    contador_factores = Counter()
+
+    for evaluacion in evaluaciones:
+        if evaluacion.nivel_riesgo == "Riesgo_Bajo":
+            riesgos["bajo"] += 1
+        elif evaluacion.nivel_riesgo == "Riesgo_Medio":
+            riesgos["medio"] += 1
+        elif evaluacion.nivel_riesgo == "Riesgo_Alto":
+            riesgos["alto"] += 1
+
+        fecha = _parse_fecha_iso(evaluacion.fecha_hora)
+
+        if fecha is not None:
+            key = fecha.strftime("%Y-%m")
+            label = f"{_mes_corto(fecha.month)} {fecha.year}"
+        else:
+            key = "sin-fecha"
+            label = "Sin fecha"
+
+        if key not in tendencia_por_mes:
+            tendencia_por_mes[key] = {
+                "key": key,
+                "mes": label,
+                "bajo": 0,
+                "medio": 0,
+                "alto": 0,
+                "total": 0,
+            }
+
+        tendencia_por_mes[key]["total"] += 1
+
+        if evaluacion.nivel_riesgo == "Riesgo_Bajo":
+            tendencia_por_mes[key]["bajo"] += 1
+        elif evaluacion.nivel_riesgo == "Riesgo_Medio":
+            tendencia_por_mes[key]["medio"] += 1
+        elif evaluacion.nivel_riesgo == "Riesgo_Alto":
+            tendencia_por_mes[key]["alto"] += 1
+
+        factores = _detectar_factores_clinicos(evaluacion.form_data or {})
+
+        for factor in factores:
+            contador_factores[factor] += 1
+
+    tendencia_mensual = sorted(
+        tendencia_por_mes.values(),
+        key=lambda item: item["key"],
+    )
+
+    factores_frecuentes = []
+
+    for factor, total in contador_factores.most_common(8):
+        porcentaje = 0
+
+        if total_evaluaciones > 0:
+            porcentaje = round((total / total_evaluaciones) * 100, 1)
+
+        factores_frecuentes.append(
+            {
+                "factor": factor,
+                "total": total,
+                "porcentaje": porcentaje,
+            }
+        )
+
+    if not factores_frecuentes:
+        factores_frecuentes = [
+            {
+                "factor": "Sin factores de alarma frecuentes",
+                "total": 0,
+                "porcentaje": 0,
+            }
+        ]
+
+    riesgo_predominante = "Sin datos"
+
+    if total_evaluaciones > 0:
+        riesgo_predominante = max(
+            riesgos,
+            key=lambda key: riesgos[key],
+        )
+
+    return {
+        "total_gestantes": len(gestantes),
+        "total_evaluaciones": total_evaluaciones,
+        "riesgos": riesgos,
+        "riesgo_predominante": riesgo_predominante,
+        "tendencia_mensual": tendencia_mensual,
+        "factores_frecuentes": factores_frecuentes,
+    }
+
+@app.get("/api/sistema/estado")
+def sistema_estado(
+    session: Session = Depends(get_session),
+):
+    gestantes = session.exec(select(Gestante)).all()
+    evaluaciones = session.exec(select(EvaluacionCentral)).all()
+
+    total_bajo = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Bajo")
+    total_medio = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Medio")
+    total_alto = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Alto")
+
+    ultima_evaluacion = session.exec(
+        select(EvaluacionCentral)
+        .order_by(EvaluacionCentral.id.desc())
+        .limit(1)
+    ).first()
+
+    ultima_card = None
+
+    if ultima_evaluacion is not None:
+        gestante = None
+
+        if ultima_evaluacion.gestante_id is not None:
+            gestante = session.get(Gestante, ultima_evaluacion.gestante_id)
+
+        ultima_card = _evaluacion_to_card(ultima_evaluacion, gestante)
+
+    return {
+        "api": {
+            "status": "online",
+            "service": "riesgo-materno-api",
+            "version": "0.1.0",
+            "timestamp": datetime.now().isoformat(),
+        },
+        "database": {
+            "status": "conectado",
+            "motor": os.getenv("DATABASE_ENGINE", "SQLite"),
+            "modo": os.getenv("DATABASE_MODE", "desarrollo"),
+            "archivo": "riesgo_materno_db" if os.getenv("DATABASE_ENGINE") == "PostgreSQL" else "riesgo_materno_central.db",
+            "migracion_pendiente": "Ninguna" if os.getenv("DATABASE_ENGINE") == "PostgreSQL" else "PostgreSQL",
+        },
+        "mobile": {
+            "origen": "flutter_offline",
+            "modelo": "LightGBM embebido en ONNX",
+            "almacenamiento_local": "SQLite + SQLCipher",
+            "sincronizacion": "automática por conectividad",
+        },
+        "web": {
+            "framework": "React + Vite",
+            "estado": "conectado a FastAPI",
+        },
+        "resumen": {
+            "total_gestantes": len(gestantes),
+            "total_evaluaciones": len(evaluaciones),
+            "riesgos": {
+                "bajo": total_bajo,
+                "medio": total_medio,
+                "alto": total_alto,
+            },
+            "ultima_evaluacion": ultima_card,
+        },
+        "endpoints": [
+            {
+                "method": "GET",
+                "path": "/health",
+                "descripcion": "Verifica si la API está activa.",
+            },
+            {
+                "method": "POST",
+                "path": "/api/evaluaciones",
+                "descripcion": "Recibe evaluaciones sincronizadas desde Flutter.",
+            },
+            {
+                "method": "GET",
+                "path": "/api/dashboard/resumen",
+                "descripcion": "Resumen principal para el dashboard web.",
+            },
+            {
+                "method": "GET",
+                "path": "/api/evaluaciones/ultimas",
+                "descripcion": "Lista resumida de últimas evaluaciones.",
+            },
+            {
+                "method": "GET",
+                "path": "/api/gestantes",
+                "descripcion": "Lista de gestantes registradas en backend.",
+            },
+            {
+                "method": "GET",
+                "path": "/api/tendencias/resumen",
+                "descripcion": "Indicadores poblacionales y factores frecuentes.",
+            },
+            {
+                "method": "GET",
+                "path": "/api/sistema/estado",
+                "descripcion": "Estado técnico del sistema.",
+            },
+        ],
+    }
 
 @app.post("/api/evaluaciones", response_model=EvaluacionResponse)
 def recibir_evaluacion(

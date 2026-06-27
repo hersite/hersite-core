@@ -6,10 +6,17 @@
   <component name="ChangeListManager">
     <list default="true" id="47f4eb3a-3c79-4ad2-a980-38ddb5d15a67" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/AndroidManifest.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/models/evaluacion_riesgo.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/models/evaluacion_riesgo.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/services/sync_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/services/sync_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pubspec.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/backend/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/App.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/layouts/Layout.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/layouts/Layout.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/pages/Configuracion.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/pages/Configuracion.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/pages/Dashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/pages/Dashboard.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/pages/Gestantes.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/pages/Gestantes.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/pages/Login.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/pages/Login.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dashboard-medico/src/pages/Tendencias.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/dashboard-medico/src/pages/Tendencias.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

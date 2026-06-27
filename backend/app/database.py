@@ -1,11 +1,24 @@
+import os
+
+from dotenv import load_dotenv
 from sqlmodel import SQLModel, Session, create_engine
 
-DATABASE_URL = "sqlite:///./riesgo_materno_central.db"
+load_dotenv()
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///./riesgo_materno_central.db",
+)
+
+connect_args = {}
+
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
 
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False},
+    connect_args=connect_args,
 )
 
 
