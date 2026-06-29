@@ -25,8 +25,9 @@ dependencies:
   internet_connection_checker_plus: ^3.0.0
   http: ^1.6.0
   url_launcher: ^6.2.0 # O la versión más reciente
-  shared_preferences: ^2.3.0
+  shared_preferences: ^2.5.5
   flutter_local_notifications: ^17.2.0
+  timezone: ^0.9.4
 
 dev_dependencies:
   flutter_test:

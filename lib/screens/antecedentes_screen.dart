@@ -7,7 +7,6 @@ import 'home_screen.dart';
 import '../services/api_client.dart';
 
 class AntecedentesScreen extends StatefulWidget {
-  // NUEVO: Bandera para saber si estamos editando o creando por primera vez
   final bool esEdicion;
   
   const AntecedentesScreen({super.key, this.esEdicion = false});
@@ -17,12 +16,10 @@ class AntecedentesScreen extends StatefulWidget {
 }
 
 class _AntecedentesScreenState extends State<AntecedentesScreen> {
-  // 1. Controladores para las 3 variables numéricas
   final TextEditingController _embarazosCtrl = TextEditingController();
   final TextEditingController _sistolicaBasalCtrl = TextEditingController();
   final TextEditingController _diastolicaBasalCtrl = TextEditingController();
 
-  // 2. Las 5 variables booleanas exactas de tu modelo
   final List<String> _preguntasBooleanas = [
     'Cesárea previa',
     'Diabetes',
@@ -32,17 +29,16 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
   ];
 
   final Map<int, bool> _respuestas = {};
+  bool _isSaving = false; // 🟢 Control de carga
 
   @override
   void initState() {
     super.initState();
-    // NUEVO: Si estamos en modo edición, cargamos los datos previos
     if (widget.esEdicion) {
       _cargarDatosExistentes();
     }
   }
 
-  // Función que va a la base de datos y llena los campos visuales
   Future<void> _cargarDatosExistentes() async {
     final perfilDb = await LocalDatabase.instance.obtenerPerfil();
     if (perfilDb != null && mounted) {
@@ -51,7 +47,6 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
         _sistolicaBasalCtrl.text = perfilDb.presionBasalSistolica.toString();
         _diastolicaBasalCtrl.text = perfilDb.presionBasalDiastolica.toString();
         
-        // Convertimos los 1 y 0 a true/false para pintar los botones
         _respuestas[0] = perfilDb.cesareaPrevia == 1;
         _respuestas[1] = perfilDb.diabetes == 1;
         _respuestas[2] = perfilDb.hipertensionPrevia == 1;
@@ -67,45 +62,42 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     });
   }
 
-  // AHORA ES ASYNC PARA GUARDAR EN LA BASE DE DATOS
   Future<void> _guardarYContinuar() async {
-    // Validación de campos numéricos
-    if (_embarazosCtrl.text.isEmpty ||
-        _sistolicaBasalCtrl.text.isEmpty ||
-        _diastolicaBasalCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor completa el número de embarazos y la presión basal.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+    if (_isSaving) return; 
+    setState(() => _isSaving = true);
+
+    if (_embarazosCtrl.text.isEmpty || _sistolicaBasalCtrl.text.isEmpty || _diastolicaBasalCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor completa el número de embarazos y la presión basal.'), backgroundColor: Colors.redAccent));
+      setState(() => _isSaving = false);
       return;
     }
 
-    // Validación de booleanos
     if (_respuestas.length < _preguntasBooleanas.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor responde Sí o No a todas las condiciones.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor responde Sí o No a todas las condiciones.'), backgroundColor: Colors.redAccent));
+      setState(() => _isSaving = false);
       return;
     }
 
-    // Conversión segura
     final numeroEmbarazos = int.tryParse(_embarazosCtrl.text.trim());
     final presionBasalSistolica = int.tryParse(_sistolicaBasalCtrl.text.trim());
     final presionBasalDiastolica = int.tryParse(_diastolicaBasalCtrl.text.trim());
 
     if (numeroEmbarazos == null || presionBasalSistolica == null || presionBasalDiastolica == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Verifica que los valores numéricos sean correctos.'), backgroundColor: Colors.redAccent),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verifica que los valores numéricos sean correctos.'), backgroundColor: Colors.redAccent));
+      setState(() => _isSaving = false);
       return;
     }
 
-    // 1. ACTUALIZAMOS LA MEMORIA TEMPORAL
+    // 🟢 1. PRIMERO CARGAMOS LO VIEJO A LA MEMORIA TEMPORAL
+    final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+    if (perfilDb != null) {
+      PerfilGestanteTemp.actualizar({
+        ...perfilDb.toModelInput(),
+        'IdPerfil': perfilDb.id, 'Nombre': perfilDb.nombre, 'DNI': perfilDb.dni, 'Celular': perfilDb.celular, 'PinHash': perfilDb.pinHash, 'PinSalt': perfilDb.pinSalt,
+      });
+    }
+
+    // 🟢 2. DESPUÉS CARGAMOS LO NUEVO PARA QUE SOBREESCRIBA LO ANTERIOR
     PerfilGestanteTemp.actualizar({
       'Numero_Embarazos': numeroEmbarazos,
       'Cesarea_Previa': _respuestas[0] == true ? 1 : 0,
@@ -117,100 +109,56 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
       'Presion_Basal_Diastolica': presionBasalDiastolica,
     });
 
-    // 2. OBTENEMOS EL MAPA COMPLETO Y LO CONVERTIMOS A MODELO
     Map<String, dynamic>? perfilMap = PerfilGestanteTemp.obtener();
 
     if (perfilMap == null || perfilMap['Edad_Materna'] == null || perfilMap['Semanas_Gestacion'] == null) {
-      final perfilDb = await LocalDatabase.instance.obtenerPerfil();
-
-      if (perfilDb != null) {
-        PerfilGestanteTemp.actualizar({
-          'IdPerfil': perfilDb.id,
-          'Nombre': perfilDb.nombre,
-          'DNI': perfilDb.dni,
-          'Celular': perfilDb.celular,
-          'PinHash': perfilDb.pinHash,
-          'PinSalt': perfilDb.pinSalt,
-          ...perfilDb.toModelInput(),
-        });
-
-        perfilMap = PerfilGestanteTemp.obtener();
-      }
-    }
-
-    if (perfilMap == null || perfilMap['Edad_Materna'] == null || perfilMap['Semanas_Gestacion'] == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se encontró el perfil temporal de la gestante.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if ((perfilMap['PinHash'] as String? ?? '').isEmpty ||
-        (perfilMap['PinSalt'] as String? ?? '').isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se encontró el PIN de registro. Vuelve a iniciar el registro.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se encontró el perfil de la gestante.'), backgroundColor: Colors.redAccent));
+      setState(() => _isSaving = false);
       return;
     }
 
     final perfil = PerfilGestante.fromTempMap(perfilMap);
 
- // 3. GUARDAMOS EN SQLITE
-try {
-  final perfilId =
-      await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
+  try {
+      // 1. Guardado local en SQLite (Celular)
+      final perfilId = await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
+      await SessionStateService.instance.setActiveProfileId(perfilId);
+      await SessionStateService.instance.markSessionActive();
 
-  await SessionStateService.instance.setActiveProfileId(perfilId);
-  await SessionStateService.instance.markSessionActive();
+      // 🟢 2. INTENTO DE SINCRONIZACIÓN CON EL SERVIDOR (FastAPI -> pgAdmin)
+      try {
+        await ApiClient.instance.enviarPerfil(perfil);
+        debugPrint('Antecedentes sincronizados con el servidor.');
+      } catch (e) {
+        debugPrint('Antecedentes guardados localmente. Se sincronizarán luego: $e');
+      }
 
-  // Intentar sincronizar con el backend (no bloquear el registro si falla)
-  final perfilActivo =
-      await LocalDatabase.instance.obtenerPerfilActivo();
+      // 3. Fetch local y Refresh UI
+      await LocalDatabase.instance.obtenerPerfil();
 
-  if (perfilActivo != null) {
-    try {
-      final respuesta =
-          await ApiClient.instance.enviarPerfil(perfilActivo);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
 
-      debugPrint(
-          'Perfil sincronizado: ${respuesta.ok} - ${respuesta.message}');
-    } catch (e) {
-      debugPrint('No se pudo sincronizar el perfil: $e');
-      // No hacemos return.
-      // El perfil ya quedó guardado localmente.
-    }
-  }
-
-} catch (e) {
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error al guardar en BD: $e'),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
-  }
-  return;
-}
-
-    // 4. NAVEGACIÓN DINÁMICA
-    if (!mounted) return;
-    
-    if (widget.esEdicion) {
-      // Si estaba editando, solo cierra la pantalla y vuelve al Perfil
-      Navigator.pop(context);
-    } else {
-      // Si era registro nuevo, la manda al Home
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const Home()), 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Datos guardados y actualizados', style: TextStyle(color: Colors.white)), 
+          backgroundColor: Color(0xFF4C924F)
+        )
       );
+
+      // 4. Navegación
+      if (widget.esEdicion) {
+        Navigator.pop(context, true); 
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const Home()));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.redAccent)
+        );
+      }
     }
   }
 
@@ -229,41 +177,15 @@ try {
       appBar: AppBar(
         backgroundColor: const Color(0xFFFBFFFB),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black), onPressed: () => Navigator.pop(context)),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(color: const Color(0xFF6EA377), borderRadius: BorderRadius.circular(15)),
-              child: const Row(
-                children: [
-                  Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
-                  SizedBox(width: 8),
-                  Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 13)),
-                ],
-              ),
+              child: const Row(children: [Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12), SizedBox(width: 8), Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 13))]),
             ),
-/*            const SizedBox(width: 16),
-            Container(
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFF6EA377))),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: const BoxDecoration(color: Color(0xFF6EA377), borderRadius: BorderRadius.horizontal(left: Radius.circular(14))),
-                    child: const Text('ES', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: const Text('QU', style: TextStyle(color: Color(0xFF6EA377), fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),*/
           ],
         ),
       ),
@@ -275,22 +197,11 @@ try {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // TÍTULO DINÁMICO
-                  Text(
-                    widget.esEdicion ? 'Editar antecedentes' : 'Antecedentes médicos', 
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')
-                  ),
+                  Text(widget.esEdicion ? 'Editar antecedentes' : 'Antecedentes médicos', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
                   const SizedBox(height: 5),
                   
-                  // MENSAJITO DE PROGRESO (SOLO SE MUESTRA SI ES REGISTRO NUEVO)
                   if (!widget.esEdicion) ...[
-                    const Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Color(0xFF4C924F), size: 18),
-                        SizedBox(width: 5),
-                        Text('Paso 2 de 2: ¡Ya casi terminas!', style: TextStyle(color: Color(0xFF4C924F), fontWeight: FontWeight.bold, fontSize: 14)),
-                      ],
-                    ),
+                    const Row(children: [Icon(Icons.check_circle, color: Color(0xFF4C924F), size: 18), SizedBox(width: 5), Text('Paso 2 de 2: ¡Ya casi terminas!', style: TextStyle(color: Color(0xFF4C924F), fontWeight: FontWeight.bold, fontSize: 14))]),
                     const SizedBox(height: 15),
                   ],
 
@@ -305,7 +216,6 @@ try {
                   const Text('1. Valores Base', style: TextStyle(color: Color(0xFF306339), fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
                   const SizedBox(height: 15),
 
-                  // EMBARAZOS
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFB9BAB9), width: 2)),
@@ -320,7 +230,6 @@ try {
                   ),
                   const SizedBox(height: 15),
 
-                  // PRESIÓN BASAL
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFB9BAB9), width: 2)),
@@ -331,27 +240,9 @@ try {
                         const SizedBox(height: 15),
                         Row(
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Sistólica', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                  const SizedBox(height: 5),
-                                  TextField(controller: _sistolicaBasalCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej. 110')),
-                                ],
-                              ),
-                            ),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Sistólica', style: TextStyle(fontSize: 12, color: Colors.grey)), const SizedBox(height: 5), TextField(controller: _sistolicaBasalCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej. 110'))])),
                             const SizedBox(width: 15),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Diastólica', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                  const SizedBox(height: 5),
-                                  TextField(controller: _diastolicaBasalCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej. 70')),
-                                ],
-                              ),
-                            ),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Diastólica', style: TextStyle(fontSize: 12, color: Colors.grey)), const SizedBox(height: 5), TextField(controller: _diastolicaBasalCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej. 70'))])),
                           ],
                         ),
                       ],
@@ -370,20 +261,17 @@ try {
             ),
           ),
           
-          // BOTÓN GUARDAR Y CONTINUAR DINÁMICO
           Container(
             padding: const EdgeInsets.all(20),
             color: const Color(0xFFFBFFFB),
             child: SizedBox(
-              width: double.infinity,
-              height: 55,
+              width: double.infinity, height: 55,
               child: ElevatedButton(
                 onPressed: _guardarYContinuar,
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4C924F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                child: Text(
-                  widget.esEdicion ? 'Guardar cambios' : 'Comenzar a usar la app', 
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')
-                ),
+                child: _isSaving 
+                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                    : Text(widget.esEdicion ? 'Guardar cambios' : 'Comenzar a usar la app', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
               ),
             ),
           ),
@@ -396,7 +284,6 @@ try {
     final bool respondido = _respuestas.containsKey(index);
     final bool esSi = respondido && _respuestas[index] == true;
     final bool esNo = respondido && _respuestas[index] == false;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(16),
@@ -408,27 +295,9 @@ try {
           const SizedBox(height: 15),
           Row(
             children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => _seleccionarRespuesta(index, true),
-                  child: Container(
-                    height: 45,
-                    decoration: BoxDecoration(color: esSi ? const Color(0xFF4C924F) : Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: esSi ? const Color(0xFF4C924F) : const Color(0xFFB9BAB9), width: 2)),
-                    child: Center(child: Text('Sí', style: TextStyle(color: esSi ? Colors.white : const Color(0xFF434C43), fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Poltawski Nowy'))),
-                  ),
-                ),
-              ),
+              Expanded(child: GestureDetector(onTap: () => _seleccionarRespuesta(index, true), child: Container(height: 45, decoration: BoxDecoration(color: esSi ? const Color(0xFF4C924F) : Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: esSi ? const Color(0xFF4C924F) : const Color(0xFFB9BAB9), width: 2)), child: Center(child: Text('Sí', style: TextStyle(color: esSi ? Colors.white : const Color(0xFF434C43), fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Poltawski Nowy')))))),
               const SizedBox(width: 15),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => _seleccionarRespuesta(index, false),
-                  child: Container(
-                    height: 45,
-                    decoration: BoxDecoration(color: esNo ? const Color(0xFF4C924F) : const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(10), border: Border.all(color: esNo ? const Color(0xFF4C924F) : const Color(0xFFB9BAB9), width: 2)),
-                    child: Center(child: Text('No', style: TextStyle(color: esNo ? Colors.white : const Color(0xFF434C43), fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Poltawski Nowy'))),
-                  ),
-                ),
-              ),
+              Expanded(child: GestureDetector(onTap: () => _seleccionarRespuesta(index, false), child: Container(height: 45, decoration: BoxDecoration(color: esNo ? const Color(0xFF4C924F) : const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(10), border: Border.all(color: esNo ? const Color(0xFF4C924F) : const Color(0xFFB9BAB9), width: 2)), child: Center(child: Text('No', style: TextStyle(color: esNo ? Colors.white : const Color(0xFF434C43), fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Poltawski Nowy')))))),
             ],
           ),
         ],

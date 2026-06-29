@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; // Importamos la pantalla de Inicio
-import 'historial_screen.dart'; // Importamos Historial
-import 'perfil_screen.dart'; // Importamos Perfil
+import 'home_screen.dart'; 
+import 'historial_screen.dart'; 
+import 'perfil_screen.dart';
 
 class AprendeScreen extends StatefulWidget {
   const AprendeScreen({super.key});
@@ -11,82 +11,54 @@ class AprendeScreen extends StatefulWidget {
 }
 
 class _AprendeScreenState extends State<AprendeScreen> {
-  // Lista dinámica de materiales educativos con diferentes tipos
+  // Variable para controlar el filtro actual
+  String _filtroActual = 'Todos';
+
   final List<Map<String, dynamic>> _materiales = [
-    {
-      'tipo': 'Audio',
-      'titulo': 'Señales de alarma',
-      'duracion': '3 minutos',
-      'visto': false,
-      'completado': false
-    },
-    {
-      'tipo': 'Audio',
-      'titulo': 'Control prenatal',
-      'duracion': '4 minutos',
-      'visto': false,
-      'completado': true
-    },
-    {
-      'tipo': 'Artículo',
-      'titulo': 'Alimentación clave en el embarazo',
-      'duracion': '5 minutos de lectura',
-      'visto': false,
-      'completado': false
-    },
-    {
-      'tipo': 'Infografía',
-      'titulo': 'Posturas para dormir mejor',
-      'duracion': 'Visual',
-      'visto': false,
-      'completado': false
-    },
-    {
-      'tipo': 'Audio',
-      'titulo': 'Movimiento del bebé',
-      'duracion': '2 minutos',
-      'visto': false,
-      'completado': false
-    },
-    {
-      'tipo': 'Artículo',
-      'titulo': 'Cómo prevenir la preeclampsia',
-      'duracion': '7 minutos de lectura',
-      'visto': false,
-      'completado': false
-    },
+    {'tipo': 'Audio', 'titulo': 'Señales de alarma', 'duracion': '3 minutos', 'visto': false, 'completado': false},
+    {'tipo': 'Audio', 'titulo': 'Control prenatal', 'duracion': '4 minutos', 'visto': false, 'completado': true},
+    {'tipo': 'Artículo', 'titulo': 'Alimentación clave en el embarazo', 'duracion': '5 minutos de lectura', 'visto': false, 'completado': false},
+    {'tipo': 'Infografía', 'titulo': 'Posturas para dormir mejor', 'duracion': 'Visual', 'visto': false, 'completado': false},
+    {'tipo': 'Audio', 'titulo': 'Movimiento del bebé', 'duracion': '2 minutos', 'visto': false, 'completado': false},
+    {'tipo': 'Artículo', 'titulo': 'Cómo prevenir la preeclampsia', 'duracion': '7 minutos de lectura', 'visto': false, 'completado': false},
   ];
 
-  void _toggleCompletado(int index) {
+  void _toggleCompletado(int index, Map<String, dynamic> materialReal) {
     setState(() {
-      _materiales[index]['completado'] = !_materiales[index]['completado'];
+      // Buscamos el índice real en la lista original para no cruzar datos al filtrar
+      int realIndex = _materiales.indexOf(materialReal);
+      _materiales[realIndex]['completado'] = !_materiales[realIndex]['completado'];
     });
   }
 
-  void _toggleVisto(int index) {
+  void _toggleVisto(int index, Map<String, dynamic> materialReal) {
     setState(() {
-      _materiales[index]['visto'] = !_materiales[index]['visto'];
+      int realIndex = _materiales.indexOf(materialReal);
+      _materiales[realIndex]['visto'] = !_materiales[realIndex]['visto'];
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // 🟢 LÓGICA DE FILTRADO
+    List<Map<String, dynamic>> materialesFiltrados = _materiales.where((m) {
+      if (_filtroActual == 'Pendientes') return !m['completado'];
+      if (_filtroActual == 'Completados') return m['completado'];
+      return true; // Para 'Todos'
+    }).toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFFBFFFB),
-      // Al tener barra inferior, ya no necesitamos la flecha de retroceso (leading) en el AppBar
       appBar: AppBar(
         backgroundColor: const Color(0xFFFBFFFB),
         elevation: 0,
-        automaticallyImplyLeading: false, // Oculta la flecha de volver atrás
+        automaticallyImplyLeading: false, 
         title: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6EA377),
-                borderRadius: BorderRadius.circular(15),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF6EA377), borderRadius: BorderRadius.circular(15)),
               child: const Row(
                 children: [
                   Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
@@ -95,99 +67,57 @@ class _AprendeScreenState extends State<AprendeScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 16),
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: const Color(0xFF6EA377)),
-              ),
-             /* child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF6EA377),
-                      borderRadius: BorderRadius.horizontal(left: Radius.circular(14)),
-                    ),
-                    child: const Text('ES', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: const Text('QU', style: TextStyle(color: Color(0xFF6EA377), fontSize: 12)),
-                  ),
-                ],
-              ),*/
-            ),
           ],
         ),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // CABECERA VERDE
           Container(
             width: double.infinity,
             margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF306339),
-              borderRadius: BorderRadius.circular(15),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF306339), borderRadius: BorderRadius.circular(15)),
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Aprende',
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
-                ),
+                Text('Aprende', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
                 SizedBox(height: 5),
-                Text(
-                  'Información para tu embarazo',
-                  style: TextStyle(color: Color(0xFFEEFFEF), fontSize: 15, fontFamily: 'Poltawski Nowy'),
-                ),
+                Text('Información para tu embarazo', style: TextStyle(color: Color(0xFFEEFFEF), fontSize: 15, fontFamily: 'Poltawski Nowy')),
               ],
             ),
           ),
           
+          // 🟢 BOTONES DE FILTRO AGREGADOS
+          _buildFiltros(),
+
           // LISTA DE MATERIALES
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: _materiales.length,
-              itemBuilder: (context, index) {
-                return _buildMaterialCard(index);
-              },
-            ),
+            child: materialesFiltrados.isEmpty 
+              ? Center(child: Text('No hay materiales en esta sección.', style: TextStyle(color: Colors.grey.shade500)))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: materialesFiltrados.length,
+                  itemBuilder: (context, index) {
+                    return _buildMaterialCard(index, materialesFiltrados[index]);
+                  },
+                ),
           ),
         ],
       ),
-      // ==========================================
-      // BARRA INFERIOR CON NAVEGACIÓN COMPLETA
-      // ==========================================
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: const Color(0xFF306339),
-        selectedItemColor: Colors.white, // El ícono seleccionado será blanco
-        unselectedItemColor: Colors.white70, // Los demás un poco opacos
+        selectedItemColor: Colors.white, 
+        unselectedItemColor: Colors.white70, 
         type: BottomNavigationBarType.fixed,
-        currentIndex: 2, // <--- ESTO ENCIENDE EL TERCER ÍCONO (Aprende)
+        currentIndex: 2, 
         onTap: (index) {
           if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const Home()),
-            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const Home()));
           } else if (index == 1) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HistorialScreen()),
-            );
-          } else if (index == 2) {
-            // Ya estás en la pantalla Aprende
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HistorialScreen()));
           } else if (index == 3) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const PerfilScreen()),
-            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const PerfilScreen()));
           }
         },
         items: const [
@@ -200,13 +130,32 @@ class _AprendeScreenState extends State<AprendeScreen> {
     );
   }
 
-  // WIDGET REUTILIZABLE PARA CADA TARJETA DE MATERIAL
-  Widget _buildMaterialCard(int index) {
-    final material = _materiales[index];
+  // 🟢 WIDGET DE FILTROS
+  Widget _buildFiltros() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: ['Pendientes', 'Completados', 'Todos'].map((filtro) {
+          bool activo = _filtroActual == filtro;
+          return GestureDetector(
+            onTap: () => setState(() => _filtroActual = filtro),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+              decoration: BoxDecoration(color: activo ? const Color(0xFF4C924F) : Colors.grey.shade200, borderRadius: BorderRadius.circular(20)),
+              child: Text(filtro, style: TextStyle(color: activo ? Colors.white : Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+           );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMaterialCard(int index, Map<String, dynamic> material) {
     final bool completado = material['completado'];
     final bool visto = material['visto'];
-    
-    // Configuramos texto e ícono dependiendo del tipo
+
     String textoBotonAccion = '';
     IconData iconoBotonAccion;
     IconData iconoPrincipal;
@@ -220,7 +169,6 @@ class _AprendeScreenState extends State<AprendeScreen> {
       iconoBotonAccion = Icons.menu_book;
       iconoPrincipal = Icons.article;
     } else {
-      // Para Infografía u otros
       textoBotonAccion = 'Mirar';
       iconoBotonAccion = Icons.visibility;
       iconoPrincipal = Icons.image;
@@ -237,16 +185,11 @@ class _AprendeScreenState extends State<AprendeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // TÍTULO E ICONO
           Row(
             children: [
               Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEFFEF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                width: 50, height: 50,
+                decoration: BoxDecoration(color: const Color(0xFFEEFFEF), borderRadius: BorderRadius.circular(8)),
                 child: Icon(iconoPrincipal, color: const Color(0xFF306339)),
               ),
               const SizedBox(width: 15),
@@ -254,52 +197,34 @@ class _AprendeScreenState extends State<AprendeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      material['titulo'],
-                      style: const TextStyle(color: Color(0xFF434C43), fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
-                    ),
+                    Text(material['titulo'], style: const TextStyle(color: Color(0xFF434C43), fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
                     const SizedBox(height: 5),
-                    Text(
-                      '${material['tipo']} - ${material['duracion']}',
-                      style: const TextStyle(color: Color(0xFF434C43), fontSize: 14, fontFamily: 'Poltawski Nowy'),
-                    ),
+                    Text('${material['tipo']} - ${material['duracion']}', style: const TextStyle(color: Color(0xFF434C43), fontSize: 14, fontFamily: 'Poltawski Nowy')),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 15),
-          
-          // BOTONES INFERIORES
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _toggleVisto(index),
+                  onPressed: () {
+                    _toggleVisto(index, material);
+                    // AQUÍ LUEGO AGREGAREMOS LA NAVEGACIÓN PARA ABRIR EL AUDIO/IMAGEN
+                  },
                   icon: Icon(iconoBotonAccion, color: visto ? Colors.white : const Color(0xFF306339)),
                   label: Text(textoBotonAccion, style: TextStyle(color: visto ? Colors.white : const Color(0xFF306339), fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: visto ? const Color(0xFF4C924F) : const Color(0xFFEEFFEF),
-                    side: const BorderSide(color: Color(0xFF2CE42C)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 0,
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: visto ? const Color(0xFF4C924F) : const Color(0xFFEEFFEF), side: const BorderSide(color: Color(0xFF2CE42C)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 0),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _toggleCompletado(index),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: completado ? const Color(0xFFD9D9D9) : Colors.white,
-                    side: const BorderSide(color: Color(0xFFB9BAB9)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: Text(
-                    completado ? 'Completado' : 'Marcar completado',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xFF434C43), fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
+                  onPressed: () => _toggleCompletado(index, material),
+                  style: OutlinedButton.styleFrom(backgroundColor: completado ? const Color(0xFFD9D9D9) : Colors.white, side: const BorderSide(color: Color(0xFFB9BAB9)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: Text(completado ? 'Completado' : 'Marcar', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF434C43), fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

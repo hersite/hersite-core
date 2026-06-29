@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'screens/inicio_screen.dart';
 import 'services/connectivity_sync_service.dart';
 //import 'screens/prediccion_screen.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz; // 🟢 IMPORTANTE: Faltaba este import para leer la locación
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // Variable global para usarla en toda la app
@@ -15,6 +17,11 @@ void notificationTapBackground(NotificationResponse details) {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 🟢 CONFIGURACIÓN DE ZONA HORARIA
+ tz.initializeTimeZones();
+  final String timeZoneName = 'America/Lima'; 
+  tz.setLocalLocation(tz.getLocation(timeZoneName));
 
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
