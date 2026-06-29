@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'historial_screen.dart'; // SE AGREGA EL IMPORT DEL HISTORIAL
+import 'package:url_launcher/url_launcher.dart';
 
 class ResultadoScreen extends StatelessWidget {
   final List<String> sintomasDetectados;
@@ -76,7 +77,7 @@ class ResultadoScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            Container(
+            /* Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: const Color(0xFF6EA377)),
@@ -97,7 +98,7 @@ class ResultadoScreen extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
+            ),*/
           ],
         ),
       ),
@@ -278,26 +279,35 @@ class ResultadoScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 45,
-                        child: OutlinedButton(
-                          onPressed: () {},
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFCE4E4),
-                            side: const BorderSide(color: Color(0xFFD33232)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.phone_in_talk, color: Color(0xFFD33232), size: 18),
-                              const SizedBox(width: 4),
-                              Text('Emergencia', style: TextStyle(color: Color(0xFFD33232), fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ),
+                     SizedBox(
+  width: double.infinity,
+  height: 45,
+  child: OutlinedButton(
+    onPressed: () async {
+      // Usamos la misma lógica que en home_screen.dart
+      final Uri launchUri = Uri(scheme: 'tel', path: '106');
+      if (await canLaunchUrl(launchUri)) {
+        await launchUrl(launchUri);
+      }
+    },
+    style: OutlinedButton.styleFrom(
+      backgroundColor: const Color(0xFFFCE4E4),
+      side: const BorderSide(color: Color(0xFFD33232)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
+    child: const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.phone_in_talk, color: Color(0xFFD33232), size: 18),
+        SizedBox(width: 4),
+        Text(
+          'Emergencia', 
+          style: TextStyle(color: Color(0xFFD33232), fontWeight: FontWeight.bold)
+        ),
+      ],
+    ),
+  ),
+),
                     ],
                   ),
                 ),

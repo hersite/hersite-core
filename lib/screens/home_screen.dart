@@ -6,6 +6,10 @@ import 'sintomas_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
 import 'historial_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
+import 'recordatorios_screen.dart'; // Asegúrate que el nombre del archivo sea el correcto
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -19,6 +23,9 @@ class _HomeState extends State<Home> {
   EvaluacionRiesgo? _ultimaEvaluacion;
   bool _cargando = true;
   String? _error;
+  DateTime? _fechaInicio;
+  DateTime? _fechaAncla;
+
 
   @override
   void initState() {
@@ -27,28 +34,40 @@ class _HomeState extends State<Home> {
   }
 
   // Carga el perfil y las evaluaciones guardadas en el disco del celular
-  Future<void> _cargarDatosInicio() async {
-    try {
-      final perfil = await LocalDatabase.instance.obtenerPerfil();
-      final evaluaciones = await LocalDatabase.instance.listarEvaluaciones();
+Future<void> _cargarDatosInicio() async {
+  try {
+    final perfil = await LocalDatabase.instance.obtenerPerfil();
+    final evaluaciones = await LocalDatabase.instance.listarEvaluaciones();
 
-      if (!mounted) return;
-
-      setState(() {
-        _perfil = perfil;
-        _ultimaEvaluacion = evaluaciones.isNotEmpty ? evaluaciones.first : null;
-        _cargando = false;
-        _error = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _cargando = false;
-        _error = e.toString();
-      });
+    final prefs = await SharedPreferences.getInstance();
+    String? fechaGuardada = prefs.getString('fecha_ancla_usuario');
+    
+    // --- LÓGICA CORREGIDA ---
+    if (fechaGuardada == null) {
+      // USUARIA REAL: Su ancla es HOY
+      _fechaAncla = DateTime.now();  //reemplazar la línea _fechaAncla = DateTime.now() por una fecha fija antigua, como DateTime(2026, 5, 30)).
+      await prefs.setString('fecha_ancla_usuario', _fechaAncla!.toIso8601String());
+    } else {
+      // Si ya existía una fecha guardada, la cargamos
+      _fechaAncla = DateTime.parse(fechaGuardada);
     }
+    // ------------------------
+
+    if (!mounted) return;
+
+    setState(() {
+      _perfil = perfil;
+      _ultimaEvaluacion = evaluaciones.isNotEmpty ? evaluaciones.first : null;
+      _cargando = false;
+    });
+  } catch (e) {
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      _error = e.toString();
+    });
   }
+}
 
   // --- GETTERS Y FUNCIONES AUXILIARES PARA DATOS REALES ---
   String get _nombreVisible {
@@ -59,17 +78,33 @@ class _HomeState extends State<Home> {
     return nombre;
   }
 
-  String get _semanasTexto {
-    final semanas = _perfil?.semanasGestacion;
-    if (semanas == null) return '--';
-    return semanas.toString();
-  }
+String get _semanasTexto {
+  final semanasIngresadas = _perfil?.semanasGestacion;
+  if (semanasIngresadas == null || _fechaAncla == null) return '--';
+
+  // 1. Calculamos días transcurridos desde que "empezó" la app (tu fecha ancla random)
+  final diasTranscurridos = DateTime.now().difference(_fechaAncla!).inDays;
+  
+  // 2. Semanas que han pasado (división entera)
+  final semanasQueHanPasado = (diasTranscurridos / 7).floor();
+  
+  // 3. LA SUMA FINAL (Aquí es donde Lucia y Maria son diferentes)
+  final semanasActuales = semanasIngresadas + semanasQueHanPasado;
+  
+  return semanasActuales.toString();
+}
 
   String get _diasParaPartoTexto {
-    final semanas = _perfil?.semanasGestacion;
-    if (semanas == null) return '--';
-    final dias = (40 - semanas) * 7;
-    return dias <= 0 ? '0' : dias.toString();
+  final semanasIniciales = _perfil?.semanasGestacion;
+  if (semanasIniciales == null || _fechaAncla == null) return '--';
+
+  final diasTranscurridos = DateTime.now().difference(_fechaAncla!).inDays;
+  final semanasActuales = semanasIniciales + (diasTranscurridos / 7).floor();
+  
+  // Calculamos días restantes para la semana 40
+  final diasRestantes = ((40 - semanasActuales) * 7) - (diasTranscurridos % 7);
+  
+  return diasRestantes <= 0 ? '0' : diasRestantes.toString();
   }
 
   String get _fechaProbablePartoTexto {
@@ -207,7 +242,7 @@ class _HomeState extends State<Home> {
                               ],
                             ),
                           ),
-                          Container(
+                         /* Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: const Color(0xFF6EA377),
@@ -221,7 +256,7 @@ class _HomeState extends State<Home> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
+                          ),*/
                         ],
                       ),
                       const SizedBox(height: 15),
@@ -445,28 +480,40 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Widget _tarjetaEmergencia() {
-    return Container(
-      height: 50,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCE4E4),
-        border: Border.all(color: const Color(0xFFD33232)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.phone_in_talk, color: Color(0xFFD33232), size: 16),
-          SizedBox(width: 5),
-          Text(
-            'Emergencia',
-            style: TextStyle(
-              color: Color(0xFFD33232),
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+Widget _tarjetaEmergencia() {
+    return GestureDetector(
+      onTap: () async {
+        // En Perú, 106 es SAMU (Emergencias Médicas)
+        final Uri launchUri = Uri(scheme: 'tel', path: '106');
+        if (await canLaunchUrl(launchUri)) {
+          await launchUrl(launchUri);
+        } else {
+          // Opcional: mostrar un mensaje si no se puede abrir el marcador
+          debugPrint('No se pudo abrir el marcador telefónico');
+        }
+      },
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFCE4E4),
+          border: Border.all(color: const Color(0xFFD33232)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.phone_in_talk, color: Color(0xFFD33232), size: 16),
+            SizedBox(width: 5),
+            Text(
+              'Emergencia',
+              style: TextStyle(
+                color: Color(0xFFD33232),
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -580,8 +627,14 @@ class _HomeState extends State<Home> {
 
   Widget _tarjetaCuadrada(BuildContext context, String titulo) {
     return GestureDetector(
-      onTap: () {
-        if (titulo == 'Aprende') {
+onTap: () {
+        // Lógica de navegación dinámica según el título
+        if (titulo == 'Recordatorios') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const RecordatoriosScreen()),
+          );
+        } else if (titulo == 'Aprende') {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const AprendeScreen()),

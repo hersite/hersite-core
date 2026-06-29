@@ -8,6 +8,7 @@ import 'aprende_screen.dart';
 import 'antecedentes_screen.dart';
 import 'historial_screen.dart';
 import 'inicio_screen.dart';
+import 'registrar_screen.dart';
 
 
 class PerfilScreen extends StatefulWidget {
@@ -186,45 +187,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: const Color(0xFF6EA377)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF6EA377),
-                      borderRadius: BorderRadius.horizontal(
-                        left: Radius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      'ES',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: const Text(
-                      'QU',
-                      style: TextStyle(color: Color(0xFF6EA377), fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ),    
+          ]        
         ),
       ),
       body: SingleChildScrollView(
@@ -292,8 +256,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       SizedBox(
                         height: 30,
                         child: ElevatedButton(
-                          onPressed: () {
-                            // AQUÍ PONDREMOS EL NAVIGATOR HACIA EDITAR PERFIL
+                          onPressed: () async {
+                            await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                            builder: (context) => const InicioRegistrarse(esEdicion: true),
+                            ),
+                            ); 
+                            // 2. Al volver, refrescamos la vista
+                            _cargarPerfil();                          
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF6EA377),

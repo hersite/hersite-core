@@ -156,8 +156,8 @@ class _HistorialScreenState extends State<HistorialScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 16),
-            Container(
+           // const SizedBox(width: 16),
+           /* Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: const Color(0xFF6EA377)),
@@ -178,7 +178,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
                   ),
                 ],
               ),
-            ),
+            ),*/
           ],
         ),
       ),

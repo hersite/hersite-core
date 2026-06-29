@@ -4,16 +4,18 @@ import 'antecedentes_screen.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../services/pin_security_service.dart';
 import '../database/local_database.dart';
+import '../models/perfil_gestante.dart'; // IMPORTANTE AÑADIR ESTO
 
 class InicioRegistrarse extends StatefulWidget {
-  const InicioRegistrarse({super.key});
+  final bool esEdicion; // NUEVO: Bandera para saber si edita o crea
+
+  const InicioRegistrarse({super.key, this.esEdicion = false});
 
   @override
   State<InicioRegistrarse> createState() => _InicioRegistrarseState();
 }
 
 class _InicioRegistrarseState extends State<InicioRegistrarse> {
-  // Controladores para capturar lo que escribe la usuaria
   final TextEditingController _nombreCtrl = TextEditingController();
   final TextEditingController _dniCtrl = TextEditingController();
   final TextEditingController _celularCtrl = TextEditingController();
@@ -22,6 +24,32 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
   final TextEditingController _pinCtrl = TextEditingController();
 
   DateTime? _fechaSeleccionada;
+
+  @override
+  void initState() {
+    super.initState();
+    // NUEVO: Si estamos en modo edición, cargamos los datos previos
+    if (widget.esEdicion) {
+      _cargarDatosExistentes();
+    }
+  }
+
+  Future<void> _cargarDatosExistentes() async {
+    final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+    if (perfilDb != null && mounted) {
+      setState(() {
+        _nombreCtrl.text = perfilDb.nombre;
+        _dniCtrl.text = perfilDb.dni;
+        _celularCtrl.text = perfilDb.celular;
+        _semanasCtrl.text = perfilDb.semanasGestacion.toString();
+        
+        // Como la fecha de nacimiento no se guardaba en BD (solo la edad),
+        // hacemos un cálculo inverso aproximado para rellenar el campo visualmente
+        _fechaSeleccionada = DateTime.now().subtract(Duration(days: (perfilDb.edadMaterna * 365)));
+        _fechaNacimientoCtrl.text = "${_fechaSeleccionada!.day.toString().padLeft(2, '0')}/${_fechaSeleccionada!.month.toString().padLeft(2, '0')}/${_fechaSeleccionada!.year}";
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -34,20 +62,19 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
     super.dispose();
   }
 
-  // Abre el calendario nativo de Flutter
   Future<void> _seleccionarFecha(BuildContext context) async {
     final DateTime? seleccion = await showDatePicker(
       context: context,
-      initialDate: DateTime(2005, 2, 21), // Fecha base de sugerencia
-      firstDate: DateTime(1970), // Límite inferior (aprox 55 años)
-      lastDate: DateTime.now(),  // Límite superior (hoy)
+      initialDate: _fechaSeleccionada ?? DateTime(2005, 2, 21),
+      firstDate: DateTime(1970),
+      lastDate: DateTime.now(),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4C924F), // Verde principal
-              onPrimary: Colors.white, // Letras blancas sobre el verde
-              onSurface: Color(0xFF434C43), // Color de los días
+              primary: Color(0xFF4C924F),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF434C43),
             ),
           ),
           child: child!,
@@ -58,195 +85,117 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
     if (seleccion != null) {
       setState(() {
         _fechaSeleccionada = seleccion;
-        // Formateamos para que se vea bonito en el TextField: DD/MM/YYYY
         _fechaNacimientoCtrl.text = "${seleccion.day.toString().padLeft(2, '0')}/${seleccion.month.toString().padLeft(2, '0')}/${seleccion.year}";
       });
     }
   }
 
-  /*void _continuar() {
-    // 1. Validamos que haya seleccionado fecha y escrito las semanas
-    final semanas = int.tryParse(_semanasCtrl.text.trim());
-
-    if (_fechaSeleccionada == null || semanas == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, selecciona tu fecha de nacimiento y semanas de gestación.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    // 2. Calculamos la edad exacta a partir del calendario
-    final hoy = DateTime.now();
-    int edadCalculada = hoy.year - _fechaSeleccionada!.year;
-    if (hoy.month < _fechaSeleccionada!.month || 
-       (hoy.month == _fechaSeleccionada!.month && hoy.day < _fechaSeleccionada!.day)) {
-      edadCalculada--; // Le restamos 1 si aún no cumple años este año
-    }
-
-    if (edadCalculada < 12 || edadCalculada > 55) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('La edad calculada no está en un rango válido para el registro.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (semanas < 1 || semanas > 42) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Las semanas de gestación deben estar entre 1 y 42.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    // 3. GUARDAMOS EN LA MEMORIA TEMPORAL LOS DATOS DEL ML
-    PerfilGestanteTemp.actualizar({
-      'Edad_Materna': edadCalculada, // Pasamos la edad calculada matemáticamente
-      'Semanas_Gestacion': semanas,
-      'Nombre': _nombreCtrl.text.trim(), 
-    });
-
-    // 4. Viajamos al Asistente de Antecedentes Médicos
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const AntecedentesScreen()),
-    );
-  }*/
-
-  Future <void> _continuar() async {
+  Future<void> _continuar() async {
     final nombre = _nombreCtrl.text.trim();
     final dni = _dniCtrl.text.trim();
     final celular = _celularCtrl.text.trim();
     final pin = _pinCtrl.text.trim();
-
     final semanas = int.tryParse(_semanasCtrl.text.trim());
 
     if (nombre.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, ingresa tu nombre completo.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, ingresa tu nombre completo.'), backgroundColor: Colors.redAccent));
       return;
     }
 
     if (dni.length != 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El DNI debe tener 8 dígitos.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El DNI debe tener 8 dígitos.'), backgroundColor: Colors.redAccent));
       return;
     }
 
-    final perfilExistente = await LocalDatabase.instance.obtenerPerfilPorDni(dni);
-
-    if (perfilExistente != null) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ya existe una cuenta local registrada con este DNI. Ingresa con tu PIN.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
+    // Validación de DNI duplicado SOLO si es un registro nuevo
+    if (!widget.esEdicion) {
+      final perfilExistente = await LocalDatabase.instance.obtenerPerfilPorDni(dni);
+      if (perfilExistente != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ya existe una cuenta con este DNI. Ingresa con tu PIN.'), backgroundColor: Colors.redAccent));
+        return;
+      }
     }
 
     if (celular.length != 9) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El celular debe tener 9 dígitos.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El celular debe tener 9 dígitos.'), backgroundColor: Colors.redAccent));
       return;
     }
 
-    if (pin.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El PIN debe tener 6 dígitos.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+    // Validación de PIN SOLO si es un registro nuevo
+    if (!widget.esEdicion && pin.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El PIN debe tener 6 dígitos.'), backgroundColor: Colors.redAccent));
       return;
     }
 
     if (_fechaSeleccionada == null || semanas == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, selecciona tu fecha de nacimiento y semanas de gestación.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, selecciona tu fecha y semanas.'), backgroundColor: Colors.redAccent));
       return;
     }
 
     final hoy = DateTime.now();
-
     var edadCalculada = hoy.year - _fechaSeleccionada!.year;
-
-    if (hoy.month < _fechaSeleccionada!.month ||
-        (hoy.month == _fechaSeleccionada!.month &&
-            hoy.day < _fechaSeleccionada!.day)) {
+    if (hoy.month < _fechaSeleccionada!.month || (hoy.month == _fechaSeleccionada!.month && hoy.day < _fechaSeleccionada!.day)) {
       edadCalculada--;
     }
 
     if (edadCalculada < 12 || edadCalculada > 55) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('La edad calculada no está en un rango válido para el registro.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rango de edad inválido.'), backgroundColor: Colors.redAccent));
       return;
     }
 
     if (semanas < 1 || semanas > 42) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Las semanas de gestación deben estar entre 1 y 42.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Las semanas deben estar entre 1 y 42.'), backgroundColor: Colors.redAccent));
       return;
     }
 
-    final pinSalt = PinSecurityService.instance.generateSalt();
-    final pinHash = PinSecurityService.instance.hashPin(
-      pin: pin,
-      salt: pinSalt,
-    );
+    // === LÓGICA DIVIDIDA: EDICIÓN vs CREACIÓN ===
+    if (widget.esEdicion) {
+      // MODO EDICIÓN: Actualizar directo en la base de datos
+      final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+      if (perfilDb != null) {
+        PerfilGestanteTemp.actualizar({
+          'IdPerfil': perfilDb.id,
+          'Nombre': nombre,
+          'DNI': dni,
+          'Celular': celular,
+          'Edad_Materna': edadCalculada,
+          'Semanas_Gestacion': semanas,
+          'PinHash': perfilDb.pinHash, // Se mantiene el que ya tenía
+          'PinSalt': perfilDb.pinSalt, // Se mantiene el que ya tenía
+          ...perfilDb.toModelInput(), // Trae los antecedentes existentes para no borrarlos
+        });
+        
+        final perfilMap = PerfilGestanteTemp.obtener();
+        final perfilActualizado = PerfilGestante.fromTempMap(perfilMap!);
+        
+        await LocalDatabase.instance.guardarOActualizarPerfil(perfilActualizado);
+        
+        if (!mounted) return;
+        Navigator.pop(context); // Cierra y vuelve a la pantalla de Perfil
+      }
+    } else {
+      // MODO REGISTRO (Tu código original)
+      final pinSalt = PinSecurityService.instance.generateSalt();
+      final pinHash = PinSecurityService.instance.hashPin(pin: pin, salt: pinSalt);
 
-    PerfilGestanteTemp.actualizar({
-      'Nombre': nombre,
-      'DNI': dni,
-      'Celular': celular,
-      'PinHash': pinHash,
-      'PinSalt': pinSalt,
-      'Edad_Materna': edadCalculada,
-      'Semanas_Gestacion': semanas,
-    });
+      PerfilGestanteTemp.actualizar({
+        'Nombre': nombre,
+        'DNI': dni,
+        'Celular': celular,
+        'PinHash': pinHash,
+        'PinSalt': pinSalt,
+        'Edad_Materna': edadCalculada,
+        'Semanas_Gestacion': semanas,
+      });
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AntecedentesScreen(),
-      ),
-    );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AntecedentesScreen()),
+      );
+    }
   }
   
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -262,16 +211,19 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título y Logo
+              // Título Dinámico
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Crea tu cuenta', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
-                      SizedBox(height: 5),
-                      Text('Tus datos están protegidos\ny son privados', style: TextStyle(color: Color(0xFF434C43), fontSize: 13, fontFamily: 'Poltawski Nowy')),
+                      Text(
+                        widget.esEdicion ? 'Editar datos' : 'Crea tu cuenta', 
+                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')
+                      ),
+                      const SizedBox(height: 5),
+                      const Text('Tus datos están protegidos\ny son privados', style: TextStyle(color: Color(0xFF434C43), fontSize: 13, fontFamily: 'Poltawski Nowy')),
                     ],
                   ),
                   Container(
@@ -284,7 +236,6 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
               
               const SizedBox(height: 30),
 
-              // Formulario Demográfico y Clínico Básico
               _crearCajaTexto('Nombre Completo', 'Ej. Rosa María Huamán', _nombreCtrl),
               const SizedBox(height: 20),
               
@@ -292,7 +243,6 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
                 children: [
                   Expanded(child: _crearCajaTexto('DNI', 'Ej. 12345678', _dniCtrl, esNumero: true)),
                   const SizedBox(width: 15),
-                  // AQUÍ ESTÁ LA NUEVA CAJA DE FECHA CON CALENDARIO
                   Expanded(child: _crearCajaFecha('Fecha Nac.', '21/02/2005')),
                 ],
               ),
@@ -307,10 +257,15 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
               ),
               const SizedBox(height: 20),
               
-              _crearCajaTexto('Crea tu PIN (6 dígitos)', '******', _pinCtrl, esNumero: true, ocultar: true),
-              const SizedBox(height: 40),
+              // Mostrar PIN solo si NO estamos editando
+              if (!widget.esEdicion) ...[
+                _crearCajaTexto('Crea tu PIN (6 dígitos)', '******', _pinCtrl, esNumero: true, ocultar: true),
+                const SizedBox(height: 40),
+              ] else ...[
+                const SizedBox(height: 20),
+              ],
 
-              // Botón Final
+              // Botón Final Dinámico
               Center(
                 child: Column(
                   children: [
@@ -321,21 +276,21 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
                         minimumSize: const Size(200, 50),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: const Text(
-                        'Continuar',
-                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
+                      child: Text(
+                        widget.esEdicion ? 'Guardar cambios' : 'Continuar',
+                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
                       ),
                     ),
                     
                     const SizedBox(height: 12),
 
-                    // Botón para tus pruebas internas
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const TestModelScreen()));
-                      },
-                      child: const Text('Probar modelo ML (Dev)'),
-                    )
+                    if (!widget.esEdicion)
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const TestModelScreen()));
+                        },
+                        child: const Text('Probar modelo ML (Dev)'),
+                      )
                   ],
                 ),
               ),
@@ -346,7 +301,6 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
     );
   }
 
-  // Caja de Texto normal
   Widget _crearCajaTexto(String titulo, String ejemplo, TextEditingController controlador, {bool esNumero = false, bool ocultar = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,7 +324,6 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
     );
   }
 
-  // NUEVA: Caja de Fecha que bloquea el teclado y abre el DatePicker
   Widget _crearCajaFecha(String titulo, String ejemplo) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -379,7 +332,7 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
         const SizedBox(height: 8),
         GestureDetector(
           onTap: () => _seleccionarFecha(context),
-          child: AbsorbPointer( // Esto evita que suba el teclado normal
+          child: AbsorbPointer(
             child: TextField(
               controller: _fechaNacimientoCtrl,
               decoration: InputDecoration(
@@ -389,7 +342,7 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 suffixIcon: const Icon(Icons.calendar_today, color: Color(0xFF316533), size: 20),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.grey)),
-                disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.grey)), // En disabled tmb gris
+                disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.grey)), 
               ),
             ),
           ),

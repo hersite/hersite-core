@@ -117,7 +117,7 @@ final List<SintomaItem> _sintomasList = [
                 ],
               ),
             ),
-            const SizedBox(width: 16),
+            /*const SizedBox(width: 16),
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(15),
@@ -141,8 +141,8 @@ final List<SintomaItem> _sintomasList = [
                     child: const Text('QU', style: TextStyle(color: Color(0xFF6EA377), fontSize: 12)),
                   ),
                 ],
-              ),
-            ),
+              ), 
+            ),*/
           ],
         ),
       ),
