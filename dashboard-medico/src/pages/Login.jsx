@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, User } from 'lucide-react';
+import { ArrowRight, Lock, User, ShieldCheck } from 'lucide-react';
 
 import logoTesis from '../assets/logo_tesis.png';
 import { existeSesionWeb, iniciarSesionWeb } from '../services/auth';
@@ -11,16 +11,16 @@ export default function Login() {
   const [dni, setDni] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (existeSesionWeb()) {
       navigate('/dashboard', { replace: true });
     }
   }, [navigate]);
-
-  const manejarLogin = (e) => {
+  
+  const manejarLogin = async (e) => {
     e.preventDefault();
-
     setError('');
 
     if (dni.length !== 8) {
@@ -33,130 +33,156 @@ export default function Login() {
       return;
     }
 
-    iniciarSesionWeb({ dni });
+    setIsLoading(true);
 
-    navigate('/dashboard', { replace: true });
+    try {
+      await iniciarSesionWeb({ dni, pin });
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError(err.message);
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-fondoApp p-4 font-sans text-slate-800">
-      <div className="z-10 flex min-h-[580px] w-full max-w-[1000px] flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-xl md:flex-row">
-        <div className="relative flex w-full flex-col justify-between bg-gradient-to-br from-verdeOscuro to-verdeApp p-10 text-white md:w-1/2 md:p-12">
-          <div>
-            <div className="mb-10 flex items-center gap-3">
-              <img
-                src={logoTesis}
-                alt="logo_tesis"
-                className="h-12 w-12 rounded-xl border border-white/20 bg-white/10 object-contain p-1.5 shadow-lg backdrop-blur-sm"
-              />
-              <span className="text-2xl font-bold tracking-tight">hersite</span>
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 p-4 sm:p-8 font-sans text-slate-800 selection:bg-[#679366] selection:text-white">
+      
+      {/* Contenedor Principal */}
+      <div className="z-10 flex w-full max-w-[1000px] flex-col overflow-hidden rounded-[2rem] border border-slate-200/60 bg-white shadow-2xl shadow-slate-200/50 md:flex-row md:min-h-[600px]">
+        
+        {/* ========================================================= */}
+        {/* MITAD IZQUIERDA: BRANDING (VERDE SALVIA PERSONALIZADO) */}
+        {/* ========================================================= */}
+        {/* bg-[#679366] es ligeramente más claro que tu #588157 */}
+        <div className="relative flex w-full flex-col justify-between bg-[#679366] p-10 text-white md:w-5/12 lg:w-1/2 md:p-12 overflow-hidden">
+          
+          {/* Luces/Sombras de fondo para romper lo plano */}
+          <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-[#82b380]/50 blur-3xl"></div>
+          <div className="absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-[#405c3f]/50 blur-3xl"></div>
+
+          <div className="relative z-10 flex flex-col h-full justify-center">
+            
+            {/* LOGO (Fondo blanco) Y TEXTO ALINEADOS HORIZONTALMENTE */}
+            <div className="mb-10 flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white shadow-lg">
+                <img
+                  src={logoTesis}
+                  alt="logo_tesis"
+                  className="h-10 w-10 object-contain"
+                />
+              </div>
+              <span className="text-4xl font-black tracking-tight text-white drop-shadow-sm">hersite</span>
             </div>
 
-            <h1 className="mb-6 font-serif text-3xl font-bold leading-tight md:text-4xl">
-              Sistema de monitoreo de riesgo materno
+            <h1 className="mb-6 font-serif text-3xl font-bold leading-tight md:text-4xl text-white">
+              Sistema de Monitoreo <br/> de Riesgo Materno
             </h1>
 
-            <p className="max-w-sm text-sm font-medium leading-relaxed text-white/90">
-              Plataforma para el seguimiento de evaluaciones móviles sincronizadas desde zonas con conectividad limitada.
+            <p className="max-w-sm text-base font-medium leading-relaxed text-[#eaf2ea]">
+              Plataforma para el seguimiento clínico en tiempo real de evaluaciones móviles en zonas con conectividad limitada.
             </p>
-
-            <div className="mt-6 grid max-w-sm grid-cols-1 gap-3 text-xs">
-              <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
-                <p className="font-bold text-white">App móvil offline-first</p>
-                <p className="mt-1 text-white/75">Registro local, modelo ONNX y sincronización automática.</p>
-              </div>
-
-              <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
-                <p className="font-bold text-white">Dashboard clínico</p>
-                <p className="mt-1 text-white/75">Visualización de gestantes, triajes y tendencias poblacionales.</p>
-              </div>
-            </div>
           </div>
 
-          <div className="mt-12 inline-flex w-max items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-5 py-3.5 shadow-lg backdrop-blur-md">
-            <span className="h-2.5 w-2.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)] animate-pulse"></span>
-            <span className="text-sm font-semibold tracking-wide text-white">Plataforma de Vigilancia Obstétrica</span>
+          <div className="relative z-10 mt-12 inline-flex w-max items-center gap-2.5 rounded-full border border-white/20 bg-white/10 px-4 py-2 shadow-lg backdrop-blur-md">
+            <ShieldCheck size={16} className="text-[#b4d6b3]" />
+            <span className="text-[11px] font-bold tracking-widest uppercase text-white">Acceso Seguro</span>
           </div>
         </div>
 
-        <div className="flex w-full items-center justify-center bg-white p-10 md:w-1/2 md:p-12">
+        {/* ========================================================= */}
+        {/* MITAD DERECHA: FORMULARIO */}
+        {/* ========================================================= */}
+        <div className="flex w-full items-center justify-center bg-white p-10 md:w-7/12 lg:w-1/2 md:p-12 lg:p-16">
           <div className="w-full max-w-sm">
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-800">Acceso Clínico</h2>
-              <p className="mt-1 text-xs text-slate-400">
-                Ingrese sus credenciales para acceder al panel de monitoreo.
+            
+            <div className="mb-10 text-center md:text-left">
+              <h2 className="text-2xl font-black tracking-tight text-slate-800">Acceso Clínico</h2>
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                Ingrese sus credenciales institucionales para acceder al panel de monitoreo médico.
               </p>
             </div>
 
-            <form onSubmit={manejarLogin} className="space-y-4">
+            <form onSubmit={manejarLogin} className="space-y-6">
+              
+              {/* Input DNI */}
               <div className="space-y-1.5">
-                <label className="ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <label className="ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   Número de DNI
                 </label>
-
                 <div className="group relative">
-                  <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400 transition-colors group-focus-within:text-verdeApp" />
+                  {/* El icono cambia a tu color original #588157 al hacer click */}
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400 transition-colors group-focus-within:text-[#588157]" />
                   <input
                     type="text"
                     maxLength={8}
                     value={dni}
                     onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm font-medium text-slate-800 outline-none transition-all focus:border-verdeApp focus:bg-white focus:ring-2 focus:ring-verdeApp/20"
-                    placeholder="Ingrese su DNI de 8 dígitos"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 py-3.5 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition-all placeholder:font-medium placeholder:text-slate-400 focus:border-[#679366] focus:bg-white focus:ring-4 focus:ring-[#679366]/15"
+                    placeholder="Ingrese los 8 dígitos"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
 
+              {/* Input PIN */}
               <div className="space-y-1.5">
-                <div className="ml-1 flex items-center justify-between">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    PIN de acceso
-                  </label>
-                  <span className="text-[11px] font-bold text-slate-400">
-                    Desarrollo
-                  </span>
-                </div>
-
+                <label className="ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  PIN de Seguridad
+                </label>
                 <div className="group relative">
-                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-400 transition-colors group-focus-within:text-verdeApp" />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400 transition-colors group-focus-within:text-[#588157]" />
                   <input
                     type="password"
                     maxLength={6}
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-lg font-bold tracking-[0.3em] text-slate-800 outline-none transition-all focus:border-verdeApp focus:bg-white focus:ring-2 focus:ring-verdeApp/20"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 py-3.5 pl-11 pr-4 text-lg font-black tracking-[0.3em] text-slate-800 outline-none transition-all placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-[#679366] focus:bg-white focus:ring-4 focus:ring-[#679366]/15"
                     placeholder="••••••"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-                  {error}
+                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700 animate-fade-in">
+                  <AlertTriangle size={16} className="shrink-0" />
+                  <p>{error}</p>
                 </div>
               )}
 
+              {/* El Hover activa tu color #588157 exacto */}
               <button
                 type="submit"
-                className="group mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-verdeOscuro py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/10 transition-all hover:bg-verdeApp"
+                disabled={isLoading}
+                className="group mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#679366] py-4 text-sm font-bold text-white shadow-lg shadow-[#588157]/30 transition-all hover:bg-[#588157] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Ingresar al Sistema
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+                    Autenticando...
+                  </span>
+                ) : (
+                  <>
+                    Ingresar al Sistema
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </>
+                )}
               </button>
             </form>
 
-            <div className="mt-8 border-t border-slate-100 pt-6">
-              <p className="text-center text-[10px] leading-relaxed text-slate-400">
-                Módulo web para personal de salud.
-                <br />
-                Validación de credenciales reales pendiente para despliegue productivo.
+            <div className="mt-10 border-t border-slate-100 pt-8 text-center md:text-left">
+              <p className="text-[10px] leading-relaxed text-slate-400">
+                Módulo web exclusivo para personal de salud autorizado. <br className="hidden md:block"/>
+                <span className="font-semibold text-slate-500">Validación de credenciales en entorno de desarrollo.</span>
               </p>
             </div>
+            
           </div>
         </div>
       </div>
+
     </div>
   );
 }

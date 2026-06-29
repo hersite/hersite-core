@@ -92,8 +92,8 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
 
     return {
       ...perfil,
-      'Presion_Sistolica': presionSistolica ?? 115,
-      'Presion_Diastolica': presionDiastolica ?? 75,
+      'Presion_Sistolica': presionSistolica ?? -1,
+      'Presion_Diastolica': presionDiastolica ?? -1,
       'Taquicardia_Sostenida': sintomas.contains(0) ? 1 : 0,
       'Cefalea_Intensa': sintomas.contains(1) ? 1 : 0,
       'Alteracion_Visual': sintomas.contains(2) ? 1 : 0,

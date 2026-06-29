@@ -4,6 +4,7 @@ import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
 import '../services/session_state_service.dart';
 import 'home_screen.dart'; 
+import '../services/api_client.dart';
 
 class AntecedentesScreen extends StatefulWidget {
   // NUEVO: Bandera para saber si estamos editando o creando por primera vez
@@ -160,19 +161,43 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
     final perfil = PerfilGestante.fromTempMap(perfilMap);
 
-    // 3. GUARDAMOS EN SQLITE
+ // 3. GUARDAMOS EN SQLITE
+try {
+  final perfilId =
+      await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
+
+  await SessionStateService.instance.setActiveProfileId(perfilId);
+  await SessionStateService.instance.markSessionActive();
+
+  // Intentar sincronizar con el backend (no bloquear el registro si falla)
+  final perfilActivo =
+      await LocalDatabase.instance.obtenerPerfilActivo();
+
+  if (perfilActivo != null) {
     try {
-      final perfilId = await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
-      await SessionStateService.instance.setActiveProfileId(perfilId);
-      await SessionStateService.instance.markSessionActive();
+      final respuesta =
+          await ApiClient.instance.enviarPerfil(perfilActivo);
+
+      debugPrint(
+          'Perfil sincronizado: ${respuesta.ok} - ${respuesta.message}');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar en BD: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
-      return;
+      debugPrint('No se pudo sincronizar el perfil: $e');
+      // No hacemos return.
+      // El perfil ya quedó guardado localmente.
     }
+  }
+
+} catch (e) {
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error al guardar en BD: $e'),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+  }
+  return;
+}
 
     // 4. NAVEGACIÓN DINÁMICA
     if (!mounted) return;
@@ -222,7 +247,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 16),
+/*            const SizedBox(width: 16),
             Container(
               decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFF6EA377))),
               child: Row(
@@ -238,7 +263,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
                   ),
                 ],
               ),
-            ),
+            ),*/
           ],
         ),
       ),

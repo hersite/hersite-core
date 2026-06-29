@@ -11,5 +11,16 @@ export default {
     },
   },
   plugins: [],
+  darkMode: 'class',
 }
 
+module.exports = {
+  darkMode: 'class', // <--- ESTO ES VITAL
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}

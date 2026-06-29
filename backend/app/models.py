@@ -1,5 +1,4 @@
 from typing import Any, Optional
-
 from sqlalchemy import Column, JSON
 from sqlmodel import Field, SQLModel
 
@@ -23,7 +22,7 @@ class Gestante(SQLModel, table=True):
 
     presion_basal_sistolica: Optional[int] = None
     presion_basal_diastolica: Optional[int] = None
-
+    activo: bool = Field(default=True)
 
 class EvaluacionCentral(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -56,3 +55,11 @@ class EvaluacionCentral(SQLModel, table=True):
 
     sync_status_local: Optional[str] = None
     origen: Optional[str] = None
+
+class PersonalSalud(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    dni: str = Field(unique=True, index=True)
+    nombre: str
+    pin: str  # PIN de acceso (6 dígitos)
+    rol: str = Field(default="medico") # Puede ser "medico" o "admin"
+    activo: bool = True

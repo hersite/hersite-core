@@ -10,14 +10,20 @@ from sqlmodel import Session, select
 
 from app.database import create_db_and_tables, get_session
 from app.models import EvaluacionCentral, Gestante
-from app.schemas import EvaluacionPayload, EvaluacionResponse, HealthResponse
+from app.schemas import EvaluacionPayload, EvaluacionResponse, HealthResponse, PerfilPayload
 
+from fastapi import Body
+
+from pydantic import BaseModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
     yield
 
+class LoginPayload(BaseModel):
+    dni: str
+    pin: str
 
 app = FastAPI(
     title="Riesgo Materno API",
@@ -40,6 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def _riesgo_legible(nivel_riesgo: str) -> str:
     if nivel_riesgo == "Riesgo_Alto":
         return "Riesgo alto"
@@ -56,6 +63,7 @@ def _gestante_to_dict(gestante: Gestante | None):
 
     return {
         "id": gestante.id,
+        "activo": gestante.activo,
         "dni": gestante.dni,
         "nombre": gestante.nombre,
         "celular": gestante.celular,
@@ -193,30 +201,30 @@ def health_check():
 def dashboard_resumen(
     session: Session = Depends(get_session),
 ):
-    gestantes = session.exec(select(Gestante)).all()
+    # 1. Obtenemos todas las gestantes, ordenadas por registro reciente
+    gestantes = session.exec(select(Gestante).order_by(Gestante.id.desc())).all()
     evaluaciones = session.exec(select(EvaluacionCentral)).all()
 
+    # 2. Resumen de riesgos (basado en evaluaciones totales)
     total_bajo = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Bajo")
     total_medio = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Medio")
     total_alto = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Alto")
+    
+    # 3. Construimos la lista de gestantes con su última evaluación (si tiene)
+    gestantes_cards = []
+    for g in gestantes:
+        # Buscamos la última evaluación de esta gestante específica
+        ultima_eval = session.exec(
+            select(EvaluacionCentral)
+            .where(EvaluacionCentral.gestante_id == g.id)
+            .order_by(EvaluacionCentral.id.desc())
+            .limit(1)
+        ).first()
 
-    ultimas_evaluaciones = session.exec(
-        select(EvaluacionCentral)
-        .order_by(EvaluacionCentral.id.desc())
-        .limit(5)
-    ).all()
-
-    ultimas_cards = []
-
-    for evaluacion in ultimas_evaluaciones:
-        gestante = None
-
-        if evaluacion.gestante_id is not None:
-            gestante = session.get(Gestante, evaluacion.gestante_id)
-
-        ultimas_cards.append(
-            _evaluacion_to_card(evaluacion, gestante)
-        )
+        gestantes_cards.append({
+            "gestante": _gestante_to_dict(g),
+            "ultima_evaluacion": _evaluacion_to_card(ultima_eval, g) if ultima_eval else None
+        })
 
     return {
         "total_gestantes": len(gestantes),
@@ -226,10 +234,9 @@ def dashboard_resumen(
             "medio": total_medio,
             "alto": total_alto,
         },
-        "ultimas_evaluaciones": ultimas_cards,
+        "ultimas_gestantes": gestantes_cards, # Ahora enviamos gestantes, no solo evaluaciones
     }
-
-
+   
 @app.get("/api/tendencias/resumen")
 def tendencias_resumen(
     session: Session = Depends(get_session),
@@ -340,13 +347,33 @@ def tendencias_resumen(
 def sistema_estado(
     session: Session = Depends(get_session),
 ):
-    gestantes = session.exec(select(Gestante)).all()
-    evaluaciones = session.exec(select(EvaluacionCentral)).all()
+# 1. Filtramos solo a las pacientes activas
+    gestantes_activas = session.exec(select(Gestante).where(Gestante.activo == True)).all()
+    
+    total_bajo = 0
+    total_medio = 0
+    total_alto = 0
+    total_evaluaciones = 0
 
-    total_bajo = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Bajo")
-    total_medio = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Medio")
-    total_alto = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Alto")
+    # 2. Contamos SOLO la última evaluación de las activas
+    for g in gestantes_activas:
+        ultima_eval = session.exec(
+            select(EvaluacionCentral)
+            .where(EvaluacionCentral.gestante_id == g.id)
+            .order_by(EvaluacionCentral.id.desc())
+            .limit(1)
+        ).first()
 
+        if ultima_eval:
+            total_evaluaciones += 1
+            if ultima_eval.nivel_riesgo == "Riesgo_Bajo":
+                total_bajo += 1
+            elif ultima_eval.nivel_riesgo == "Riesgo_Medio":
+                total_medio += 1
+            elif ultima_eval.nivel_riesgo == "Riesgo_Alto":
+                total_alto += 1
+
+    # 3. Obtenemos la última evaluación global para la card
     ultima_evaluacion = session.exec(
         select(EvaluacionCentral)
         .order_by(EvaluacionCentral.id.desc())
@@ -354,13 +381,10 @@ def sistema_estado(
     ).first()
 
     ultima_card = None
-
     if ultima_evaluacion is not None:
         gestante = None
-
         if ultima_evaluacion.gestante_id is not None:
             gestante = session.get(Gestante, ultima_evaluacion.gestante_id)
-
         ultima_card = _evaluacion_to_card(ultima_evaluacion, gestante)
 
     return {
@@ -388,12 +412,12 @@ def sistema_estado(
             "estado": "conectado a FastAPI",
         },
         "resumen": {
-            "total_gestantes": len(gestantes),
-            "total_evaluaciones": len(evaluaciones),
+            "total_gestantes": len(gestantes_activas),
+            "total_evaluaciones": total_evaluaciones,
             "riesgos": {
                 "bajo": total_bajo,
                 "medio": total_medio,
-                "alto": total_alto,
+                "alto": total_alto, # ¡Ahora sí mandará el número exacto!
             },
             "ultima_evaluacion": ultima_card,
         },
@@ -597,10 +621,10 @@ def obtener_detalle_evaluacion(
 def listar_gestantes(
     session: Session = Depends(get_session),
 ):
+# Quitamos el filtro .where(Gestante.activo == True) para traer todas
     gestantes = session.exec(
         select(Gestante).order_by(Gestante.id.desc())
     ).all()
-
     return gestantes
 
 
@@ -631,3 +655,140 @@ def listar_evaluaciones_por_gestante(
             for evaluacion in evaluaciones
         ],
     }
+
+@app.post("/api/perfiles")
+def registrar_perfil(
+    perfil: PerfilPayload,
+    session: Session = Depends(get_session),
+):
+
+    gestante = session.exec(
+        select(Gestante).where(
+            Gestante.dni == perfil.dni
+        )
+    ).first()
+
+    if gestante is None:
+
+        gestante = Gestante(
+            dni=perfil.dni,
+            nombre=perfil.nombre,
+            celular=perfil.celular,
+            edad_materna=perfil.edad_materna,
+            semanas_gestacion=perfil.semanas_gestacion,
+            numero_embarazos=perfil.numero_embarazos,
+            cesarea_previa=perfil.cesarea_previa,
+            diabetes=perfil.diabetes,
+            hipertension_previa=perfil.hipertension_previa,
+            preeclampsia_previa=perfil.preeclampsia_previa,
+            anemia_gestacional=perfil.anemia_gestacional,
+            presion_basal_sistolica=perfil.presion_basal_sistolica,
+            presion_basal_diastolica=perfil.presion_basal_diastolica,
+        )
+
+    else:
+
+        gestante.nombre = perfil.nombre
+        gestante.celular = perfil.celular
+        gestante.edad_materna = perfil.edad_materna
+        gestante.semanas_gestacion = perfil.semanas_gestacion
+        gestante.numero_embarazos = perfil.numero_embarazos
+        gestante.cesarea_previa = perfil.cesarea_previa
+        gestante.diabetes = perfil.diabetes
+        gestante.hipertension_previa = perfil.hipertension_previa
+        gestante.preeclampsia_previa = perfil.preeclampsia_previa
+        gestante.anemia_gestacional = perfil.anemia_gestacional
+        gestante.presion_basal_sistolica = perfil.presion_basal_sistolica
+        gestante.presion_basal_diastolica = perfil.presion_basal_diastolica
+
+    session.add(gestante)
+    session.commit()
+    session.refresh(gestante)
+
+    return {
+        "ok": True,
+        "server_id": gestante.id,
+        "message": "Perfil registrado."
+    }
+
+
+#rol y seguridad
+from app.models import PersonalSalud
+
+@app.post("/api/setup-usuarios-prueba")
+def setup_usuarios(session: Session = Depends(get_session)):
+    # Verificamos si ya existen para no duplicarlos
+    if session.exec(select(PersonalSalud)).first():
+        return {"mensaje": "Los usuarios ya fueron creados previamente."}
+        
+    # Creamos un Médico
+    medico = PersonalSalud(
+        dni="26719771", 
+        nombre="Dra. Rocio Tordoya", 
+        pin="123456", 
+        rol="medico"
+    )
+    
+    # Creamos un Administrador
+    admin = PersonalSalud(
+        dni="76308504", 
+        nombre="admin", 
+        pin="123456", 
+        rol="admin"
+    )
+    
+    session.add(medico)
+    session.add(admin)
+    session.commit()
+    
+    return {"mensaje": "Usuarios de prueba creados con éxito. Revisa tu pgAdmin."}
+
+
+
+
+@app.post("/api/login")
+def login_web(payload: LoginPayload, session: Session = Depends(get_session)):
+    # 1. Buscamos al usuario por su DNI
+    usuario = session.exec(
+        select(PersonalSalud).where(PersonalSalud.dni == payload.dni)
+    ).first()
+
+    # 2. Si no existe
+    if not usuario:
+        raise HTTPException(status_code=404, detail="El DNI ingresado no está registrado.")
+
+    # 3. Si el PIN es incorrecto
+    if usuario.pin != payload.pin:
+        raise HTTPException(status_code=401, detail="PIN incorrecto. Intente nuevamente.")
+
+    # 4. Si el usuario está desactivado
+    if not usuario.activo:
+        raise HTTPException(status_code=403, detail="Este usuario ha sido desactivado.")
+
+    # 5. Todo correcto, devolvemos los datos y el ROL
+    return {
+        "ok": True,
+        "nombre": usuario.nombre,
+        "rol": usuario.rol,
+        "dni": usuario.dni
+    }
+# Asegúrate de agregar 'estado' a tu modelo Gestante si no lo tienes,
+# o simplemente cambia el campo que quieras modificar.
+
+@app.put("/api/gestantes/{gestante_id}/alta")
+def dar_de_alta_gestante(gestante_id: int, session: Session = Depends(get_session)):
+    # Buscamos a la gestante
+    gestante = session.get(Gestante, gestante_id)
+    
+    if not gestante:
+        raise HTTPException(status_code=404, detail="Gestante no encontrada")
+    
+    # Marcamos como inactiva (Asegúrate de que tu modelo Gestante tenga el campo 'estado' o 'activo')
+    # Si no tienes un campo 'estado', deberías agregarlo a tu archivo app/models.py
+    gestante.activo = False 
+    
+    session.add(gestante)
+    session.commit()
+    session.refresh(gestante)
+    
+    return {"mensaje": "Gestante dada de alta exitosamente"}

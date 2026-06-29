@@ -51,4 +51,13 @@ export const api = {
   getEvaluacionesPorGestante(gestanteId) {
     return requestJson(`/api/gestantes/${gestanteId}/evaluaciones`);
   },
+
+  // ==============================================================
+  // NUEVA FUNCIÓN: DAR DE ALTA (Soft Delete)
+  // ==============================================================
+  darDeAltaGestante(id) {
+    return requestJson(`/api/gestantes/${id}/alta`, {
+      method: 'PUT',
+    });
+  },
 };

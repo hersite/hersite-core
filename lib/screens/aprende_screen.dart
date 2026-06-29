@@ -101,7 +101,7 @@ class _AprendeScreenState extends State<AprendeScreen> {
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(color: const Color(0xFF6EA377)),
               ),
-              child: Row(
+             /* child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -116,7 +116,7 @@ class _AprendeScreenState extends State<AprendeScreen> {
                     child: const Text('QU', style: TextStyle(color: Color(0xFF6EA377), fontSize: 12)),
                   ),
                 ],
-              ),
+              ),*/
             ),
           ],
         ),

@@ -8,26 +8,34 @@ class SintomasScreen extends StatefulWidget {
   State<SintomasScreen> createState() => _SintomasScreenState();
 }
 
+class SintomaItem {
+  final String nombreAmigable;
+  final String nombreMedico; // <-- ¡Agregamos el nombre exacto para el ML!
+  final IconData icono;
+
+  SintomaItem(this.nombreAmigable, this.nombreMedico, this.icono);
+}
+
 class _SintomasScreenState extends State<SintomasScreen> {
-  final List<String> _sintomasList = [
-    'Taquicardia sostenida',
-    'Cefalea intensa',
-    'Alteración visual',
-    'Zumbido oídos',
-    'Dolor hipocondrio derecho',
-    'Dolor boca estómago',
-    'Hinchazón cara manos',
-    'Sangrado vaginal',
-    'Mareo desmayo',
-    'Sudoración fría',
-    'Fiebre escalofríos',
-    'Hipotermia subjetiva',
-    'Flujo vaginal fétido',
-    'Dolor abdominal bajo',
-    'Pérdida líquido amniótico',
-    'Confusión somnolencia',
-    'Movimientos fetales disminuidos',
-    'Dificultad respirar',
+final List<SintomaItem> _sintomasList = [
+    SintomaItem('Corazón me late rápido', 'Taquicardia sostenida', Icons.favorite_border),
+    SintomaItem('Dolor de cabeza fuerte', 'Cefalea intensa', Icons.sentiment_very_dissatisfied),
+    SintomaItem('Veo borroso / Lucecitas', 'Alteración visual', Icons.remove_red_eye),
+    SintomaItem('Zumbido en las orejas', 'Zumbido oídos', Icons.hearing),
+    SintomaItem('Dolor bajo la costilla derecha', 'Dolor hipocondrio derecho', Icons.warning_amber),
+    SintomaItem('Dolor boca del estómago', 'Dolor boca estómago', Icons.accessibility_new),
+    SintomaItem('Cara o manos hinchadas', 'Hinchazón cara manos', Icons.front_hand),
+    SintomaItem('Sangrado en mis partes', 'Sangrado vaginal', Icons.bloodtype),
+    SintomaItem('Mareos o me desmayé', 'Mareo desmayo', Icons.blur_on),
+    SintomaItem('Sudo frío', 'Sudoración fría', Icons.ac_unit),
+    SintomaItem('Tengo fiebre (calentura)', 'Fiebre escalofríos', Icons.thermostat),
+    SintomaItem('Siento mi cuerpo frío', 'Hipotermia subjetiva', Icons.severe_cold),
+    SintomaItem('Huele mal mi descenso', 'Flujo vaginal fétido', Icons.sick),
+    SintomaItem('Fuerte dolor de vientre', 'Dolor abdominal bajo', Icons.healing),
+    SintomaItem('Sale agua / líquido', 'Pérdida líquido amniótico', Icons.water_drop),
+    SintomaItem('Me siento confundida', 'Confusión somnolencia', Icons.question_mark),
+    SintomaItem('Mi bebé no se mueve', 'Movimientos fetales disminuidos', Icons.child_care),
+    SintomaItem('Me falta el aire', 'Dificultad respirar', Icons.air),
   ];
 
   final Set<int> _sintomasSeleccionados = {};
@@ -160,7 +168,7 @@ class _SintomasScreenState extends State<SintomasScreen> {
           ),
           const SizedBox(height: 20),
           
-          Expanded(
+Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: GridView.builder(
@@ -168,11 +176,15 @@ class _SintomasScreenState extends State<SintomasScreen> {
                   crossAxisCount: 3,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: 1.1,
+                  childAspectRatio: 0.85, // ¡Esto está perfecto!
                 ),
                 itemCount: _sintomasList.length,
                 itemBuilder: (context, index) {
                   final isSelected = _sintomasSeleccionados.contains(index);
+                  
+                  // 1. OBTENEMOS EL SÍNTOMA ACTUAL
+                  final sintoma = _sintomasList[index]; 
+                  
                   return GestureDetector(
                     onTap: () => _toggleSintoma(index),
                     child: Container(
@@ -184,25 +196,37 @@ class _SintomasScreenState extends State<SintomasScreen> {
                           width: 2,
                         ),
                       ),
-                      padding: const EdgeInsets.all(8),
-                      child: Center(
-                        child: Text(
-                          _sintomasList[index],
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: isSelected ? const Color(0xFF306339) : Colors.black,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Poltawski Nowy',
+                      padding: const EdgeInsets.all(4),
+                      // 2. CAMBIAMOS EL "Center" POR UN "Column" PARA PONER ICONO Y TEXTO
+                      child: Column( 
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // 3. AGREGAMOS EL ICONO
+                          Icon(
+                            sintoma.icono,
+                            color: isSelected ? const Color(0xFF4C924F) : const Color(0xFF6EA377),
+                            size: 28, 
                           ),
-                        ),
+                          const SizedBox(height: 6),
+                          // 4. CORREGIMOS EL ERROR DEL TEXTO
+                          Text(
+                            sintoma.nombreAmigable, 
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isSelected ? const Color(0xFF306339) : Colors.black,
+                              fontSize: 11, 
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Poltawski Nowy',
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 },
               ),
             ),
-          ),
+          ),          
           
           Padding(
             padding: const EdgeInsets.all(16.0),

@@ -1,10 +1,17 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="es">
   <head>
+    <!-- EL SCRIPT DEL MODO OSCURO DEBE IR AQUÍ, DENTRO DEL HEAD -->
+    <script>
+      if (localStorage.getItem('theme') === 'oscuro') {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
+    
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dashboard-medico</title>
+    <title>hersite - Triaje Materno</title>
   </head>
   <body>
     <div id="root"></div>
