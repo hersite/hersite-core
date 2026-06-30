@@ -127,9 +127,7 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
     );
   }
 
-  // === MAGIA DE LA ALARMA PROGRAMADA ===
-// === MAGIA DE LA ALARMA PROGRAMADA ===
- // === MAGIA DE LA ALARMA PROGRAMADA (VERSIÓN BLINDADA) ===
+  // === MAGIA DE LA ALARMA PROGRAMADA (VERSIÓN BLINDADA) ===
   Future<void> _programarAlarmaPush(int idAlarma, String titulo, DateTime fechaHora) async {
     try {
       final androidImplementation = flutterLocalNotificationsPlugin
@@ -155,13 +153,13 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
 
       // 3. Configuración extrema del canal
       const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'recordatorios_urgentes_v1', // 🟢 ID NUEVO para forzar creación del canal
+        'recordatorios_urgentes_v1', 
         'Recordatorios Urgentes',
         channelDescription: 'Alarmas críticas de salud',
         importance: Importance.max,
-        priority: Priority.max, // 🟢 Máxima prioridad absoluta
+        priority: Priority.max, 
         icon: '@mipmap/ic_launcher',
-        fullScreenIntent: true, // 🟢 Despierta la pantalla
+        fullScreenIntent: true, 
         enableVibration: true,
         playSound: true,
         visibility: NotificationVisibility.public,
@@ -176,7 +174,7 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
         'Es hora de: $titulo',
         fechaProgramada,
         platformDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // 🟢 IGNORA EL AHORRO DE BATERÍA
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, 
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
 
@@ -206,11 +204,20 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9), 
+      backgroundColor: const Color(0xFFFBFFFB), 
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFBFFFB),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF306339)),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: Column(
         children: [
           _buildHeader(context),
           _buildFiltros(),
+          // 🟢 La zona expandida es SOLO para las listas que hacen scroll
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -227,12 +234,27 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                   const SizedBox(height: 15),
                   if (citasFiltradas.isEmpty) _buildEmptyState('No hay citas en esta vista.')
                   else ...citasFiltradas.map((cita) => _buildAppointmentCard(cita)),
-
-                  const SizedBox(height: 40),
-                  _buildActionButtons(context),
+                  
+                  // Agregamos un poco de espacio al final de la lista
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
+          ),
+          // 🟢 Los botones ahora están FUERA del scroll, pegados abajo
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFBFFFB),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05), 
+                  blurRadius: 10, 
+                  offset: const Offset(0, -5)
+                )
+              ]
+            ),
+            child: _buildActionButtons(context),
           ),
         ],
       ),
@@ -242,7 +264,7 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
   Widget _buildFiltros() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      color: Colors.white,
+      color: Colors.transparent,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: ['Pendientes', 'Completados', 'Todos'].map((filtro) {
@@ -280,15 +302,39 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 10, bottom: 20, left: 10, right: 10),
-      decoration: const BoxDecoration(color: Color(0xFF4C924F), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]),
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF306339), 
+        borderRadius: BorderRadius.circular(15)
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-          const SizedBox(width: 5),
-          const Text('Recordatorios', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const Spacer(),
-          // 🟢 BOTÓN DE DEBUG PARA PRUEBAS MANUALES
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Recordatorios', 
+                style: TextStyle(
+                  color: Colors.white, 
+                  fontSize: 24, 
+                  fontWeight: FontWeight.bold, 
+                  fontFamily: 'Poltawski Nowy'
+                )
+              ),
+              SizedBox(height: 5),
+              Text(
+                'Tus pastillas y citas', 
+                style: TextStyle(
+                  color: Color(0xFFEEFFEF), 
+                  fontSize: 15, 
+                  fontFamily: 'Poltawski Nowy'
+                )
+              ),
+            ],
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.bug_report, color: Colors.white),
             onSelected: (value) {

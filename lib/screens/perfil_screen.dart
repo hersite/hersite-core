@@ -10,7 +10,7 @@ import 'antecedentes_screen.dart';
 import 'historial_screen.dart';
 import 'inicio_screen.dart';
 import 'registrar_screen.dart';
-
+import 'indicador_conexion.dart'; 
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -33,7 +33,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Future<void> _cargarPerfil() async {
     try {
       final perfil = await LocalDatabase.instance.obtenerPerfil();
-
       if (!mounted) return;
 
       setState(() {
@@ -43,7 +42,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-
       setState(() {
         _cargando = false;
         _error = e.toString();
@@ -131,12 +129,18 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     // Limpia solo memoria temporal del flujo.
     PerfilGestanteTemp.limpiar();
+    
+    // 🟢 Reiniciamos la notificación para el próximo login
+Future.delayed(const Duration(seconds: 2), () {
+      Home.notificacionMostradaEnSesion = false;
+    });
 
+    // Marca la sesión como cerrada.
+    await SessionStateService.instance.markSessionClosed();
     // Marca la sesión como cerrada.
     await SessionStateService.instance.markSessionClosed();
 
     if (!mounted) return;
-
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
@@ -146,10 +150,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
     );
   }
 
-
   void _mostrarMensaje(String mensaje, {bool error = false}) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensaje),
@@ -160,7 +162,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Control de carga inicial
     if (_cargando) {
       return const Scaffold(
         backgroundColor: Color(0xFFFBFFFB),
@@ -170,7 +171,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
       );
     }
 
-    // Control de errores de base de datos
     if (_error != null) {
       return Scaffold(
         backgroundColor: const Color(0xFFFBFFFB),
@@ -195,25 +195,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
         automaticallyImplyLeading: false,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6EA377),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
-                  SizedBox(width: 8),
-                  Text(
-                    'Modo offline',
-                    style: TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),    
-          ]        
         ),
       ),
       body: SingleChildScrollView(
@@ -285,11 +266,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             await Navigator.push(
                             context,
                             MaterialPageRoute(
-                            builder: (context) => const InicioRegistrarse(esEdicion: true),
+                              builder: (context) => const InicioRegistrarse(esEdicion: true),
                             ),
-                            ); 
-                            // 2. Al volver, refrescamos la vista
-                            _cargarPerfil();                          
+                            );
+                            _cargarPerfil();
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF6EA377),
@@ -343,14 +323,14 @@ class _PerfilScreenState extends State<PerfilScreen> {
                               ),
                             ),
                             Text(
-                              'Edad materna: ${_perfil?.edadMaterna ?? '--'} años',
+                               'Edad: ${_perfil?.edadMaterna ?? '--'} años',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
-                              ),
+                               ),
                             ),
                             Text(
-                              'Semanas de gestación: ${_perfil?.semanasGestacion ?? '--'}',
+                               'Semanas de gestación: ${_perfil?.semanasGestacion ?? '--'}',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -447,7 +427,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             builder: (context) => const AntecedentesScreen(esEdicion: true),
                           ),
                         );
-                        // Al volver de antecedentes, refresca la vista
                         _cargarPerfil();
                       },
                       icon: const Icon(
@@ -490,7 +469,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                 const Text(
                     'SEGURIDAD',
                     style: TextStyle(
                       color: Color(0xFF434C43),
@@ -499,19 +478,19 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                 Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Row(
                         children: [
-                          Icon(
+                           Icon(
                             Icons.shield,
                             color: Color(0xFFF9E37F),
                             size: 30,
                           ),
                           SizedBox(width: 10),
                           Text(
-                            'PIN de acceso: ****',
+                            'PIN de acceso: ******',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -530,13 +509,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                       perfil: _perfil!,
                                     ),
                                   ),
-                                );
+                                 );
 
                                 if (!mounted) return;
-
                                 if (actualizado == true) {
                                   await _cargarPerfil();
-
                                   if (!mounted) return;
 
                                   _mostrarMensaje('PIN actualizado correctamente.');
@@ -548,31 +525,21 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             color: Color(0xFF4C924F),
                             fontWeight: FontWeight.bold,
                           ),
-                        ),
+                         ),
                       ),
                     ],
                   ),
                 ],
-              ),
+               ),
             ),
             const SizedBox(height: 30),
 
-            
             // BOTÓN CERRAR SESIÓN (CONECTADO AL INICIO)
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton(
                 onPressed: _cerrarSesionSegura,
-                  // Destruye todo el historial de pantallas y te manda al login/inicio
-                  /*Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const InicioPrimer(),
-                    ),
-                    (Route<dynamic> route) => false,
-                  );
-                },*/
                 style: OutlinedButton.styleFrom(
                   backgroundColor: const Color(0xFFFCE4E4),
                   side: const BorderSide(color: Color(0xFFD33232), width: 2),
@@ -588,7 +555,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Poltawski Nowy',
                   ),
-                ),
+                 ),
               ),
             ),
             const SizedBox(height: 20),

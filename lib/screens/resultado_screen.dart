@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'historial_screen.dart'; // SE AGREGA EL IMPORT DEL HISTORIAL
 import 'package:url_launcher/url_launcher.dart';
+import 'indicador_conexion.dart'; // NUEVO IMPORT AÑADIDO
+import 'home_screen.dart'; // NUEVO IMPORT AÑADIDO
 
 class ResultadoScreen extends StatelessWidget {
   final List<String> sintomasDetectados;
@@ -57,49 +59,16 @@ class ResultadoScreen extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const Home(),
+                              ),
+                            )
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6EA377),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
-                  SizedBox(width: 8),
-                  Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 13)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            /* Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: const Color(0xFF6EA377)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF6EA377),
-                      borderRadius: BorderRadius.horizontal(left: Radius.circular(14)),
-                    ),
-                    child: const Text('ES', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: const Text('QU', style: TextStyle(color: Color(0xFF6EA377), fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),*/
-          ],
+           
         ),
       ),
       body: SingleChildScrollView(

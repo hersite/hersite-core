@@ -7,7 +7,8 @@ import '../services/connectivity_sync_service.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
-import 'detalle_evaluacion_screen.dart'; // NUEVO IMPORT AÑADIDO
+import 'detalle_evaluacion_screen.dart'; 
+import 'indicador_conexion.dart';
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -19,6 +20,7 @@ class HistorialScreen extends StatefulWidget {
 class _HistorialScreenState extends State<HistorialScreen> {
   late Future<List<EvaluacionRiesgo>> _futureEvaluaciones;
   bool _sincronizando = false;
+  String _filtroActual = 'Todos';
 
   @override
   void initState() {
@@ -119,7 +121,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
   String _formatearFecha(String fechaIso) {
     try {
       final fecha = DateTime.parse(fechaIso);
-      // Ej: 28 mayo 2026
       return "${fecha.day} ${_obtenerMes(fecha.month)} ${fecha.year}";
     } catch (e) {
       return "Fecha reciente";
@@ -139,47 +140,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
         backgroundColor: const Color(0xFFFBFFFB),
         elevation: 0,
         automaticallyImplyLeading: false, // Pantalla jefa, sin flecha de atrás
-        title: Row(
+        title: const Row(
           mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6EA377),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
-                  SizedBox(width: 8),
-                  Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 13)),
-                ],
-              ),
-            ),
-           // const SizedBox(width: 16),
-           /* Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: const Color(0xFF6EA377)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF6EA377),
-                      borderRadius: BorderRadius.horizontal(left: Radius.circular(14)),
-                    ),
-                    child: const Text('ES', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: const Text('QU', style: TextStyle(color: Color(0xFF6EA377), fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),*/
-          ],
+
         ),
       ),
       body: FutureBuilder<List<EvaluacionRiesgo>>(
@@ -194,6 +157,13 @@ class _HistorialScreenState extends State<HistorialScreen> {
           }
 
           final evaluaciones = snapshot.data ?? [];
+          
+          final evaluacionesFiltradas = evaluaciones.where((e) {
+            if (_filtroActual == 'Bajo') return e.nivelRiesgo == 'Riesgo_Bajo';
+            if (_filtroActual == 'Medio') return e.nivelRiesgo == 'Riesgo_Medio';
+            if (_filtroActual == 'Alto') return e.nivelRiesgo == 'Riesgo_Alto';
+            return true; // Si es 'Todos'
+          }).toList();
 
           // Contamos cuántas hay de cada tipo para los círculos de arriba
           int countBajo = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Bajo').length;
@@ -201,24 +171,39 @@ class _HistorialScreenState extends State<HistorialScreen> {
           int countAlto = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Alto').length;
 
           final countPendientes = evaluaciones.where((e) => e.syncStatus == 'pendiente').length;
-
+          
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // TITULOS DE CABECERA
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
-                child: Column(
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF306339), 
+                  borderRadius: BorderRadius.circular(15)
+                ),
+                child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'HISTORIAL',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
+                      'Historial',
+                      style: TextStyle(
+                        color: Colors.white, 
+                        fontSize: 24, 
+                        fontWeight: FontWeight.bold, 
+                        fontFamily: 'Poltawski Nowy'
+                      ),
                     ),
-                    SizedBox(height: 4),
+                    SizedBox(height: 5),
                     Text(
                       'Tus últimas evaluaciones',
-                      style: TextStyle(color: Color(0xFF306339), fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy'),
+                      style: TextStyle(
+                        color: Color(0xFFEEFFEF), 
+                        fontSize: 15, 
+                        fontFamily: 'Poltawski Nowy'
+                      ),
                     ),
                   ],
                 ),
@@ -237,7 +222,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildContadorCirculo(countBajo.toString(), const Color(0xFF4C924F)), // Estable (Verde)
-                    _buildContadorCirculo(countMedio.toString(), const Color(0xFFF9E37F)), // Precaución (Amarillo)
+                    _buildContadorCirculo(countMedio.toString(), const Color.fromARGB(255, 240, 208, 66)), // Precaución (Amarillo)
                     _buildContadorCirculo(countAlto.toString(), const Color(0xFFD33232)), // Urgente (Rojo)
                   ],
                 ),
@@ -301,10 +286,13 @@ class _HistorialScreenState extends State<HistorialScreen> {
               ),
               const SizedBox(height: 12),
 
+              // BARRA DE FILTROS
+              _buildFiltros(),
+
               // LISTA SCROLLEABLE DE TARJETAS DESDE SQLITE
               Expanded(
-                child: evaluaciones.isEmpty
-                    ? const Center(child: Text('Aún no tienes evaluaciones guardadas.', style: TextStyle(color: Colors.grey)))
+                child: evaluacionesFiltradas.isEmpty
+                    ? const Center(child: Text('No hay evaluaciones para este filtro.', style: TextStyle(color: Colors.grey)))
                     : RefreshIndicator(
                         onRefresh:() async {
                           await ConnectivitySyncService.instance.trySyncNow(
@@ -316,14 +304,11 @@ class _HistorialScreenState extends State<HistorialScreen> {
                         color: const Color(0xFF4C924F),
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: evaluaciones.length,
+                          itemCount: evaluacionesFiltradas.length,
                           itemBuilder: (context, index) {
-                            final evaluacion = evaluaciones[index];
+                            final evaluacion = evaluacionesFiltradas[index];
                             final estilo = _obtenerEstiloPorRiesgo(evaluacion.nivelRiesgo);
 
-                            // ==========================================
-                            // PASO 5: TARJETA ENVUELTA EN GESTUREDETECTOR
-                            // ==========================================
                             return GestureDetector(
                               onTap: () {
                                 Navigator.push(
@@ -415,7 +400,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                 ),
                               ),
                             );
-                            // ==========================================
                           },
                         ),
                       ),
@@ -470,6 +454,41 @@ class _HistorialScreenState extends State<HistorialScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // EL WIDGET CON LOS BOTONES DE FILTRO
+  Widget _buildFiltros() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal, 
+        child: Row(
+          children: ['Todos', 'Bajo', 'Medio', 'Alto'].map((filtro) {
+            bool activo = _filtroActual == filtro;
+            return GestureDetector(
+              onTap: () => setState(() => _filtroActual = filtro),
+              child: Container(
+                margin: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: activo ? const Color(0xFF4C924F) : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  filtro,
+                  style: TextStyle(
+                    color: activo ? Colors.white : Colors.grey.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
     );
   }
 }

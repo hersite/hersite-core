@@ -12,10 +12,13 @@ import 'recordatorios_screen.dart';
 import 'dart:convert';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../main.dart'; 
-import 'package:connectivity_plus/connectivity_plus.dart'; // 🟢 IMPORT CORRECTO
+import 'package:connectivity_plus/connectivity_plus.dart'; 
 import 'dart:async';
 
 class Home extends StatefulWidget {
+  // 🟢 Control global estático para evitar la notificación al navegar o cerrar sesión
+  static bool notificacionMostradaEnSesion = false;
+
   const Home({super.key});
 
   @override
@@ -30,8 +33,9 @@ class _HomeState extends State<Home> {
   DateTime? _fechaAncla;
   int _notificacionesPendientes = 0;
   List<String> _mensajesNotificacion = [];
-
-  // 🟢 VARIABLES CORREGIDAS PARA LA CONEXIÓN
+  
+  // 🔴 Se eliminó la variable local _notificacionMostradaEnSesion
+  
   bool _hayConexion = false;
   late StreamSubscription<List<ConnectivityResult>> _conexionSubscription;
 
@@ -39,12 +43,11 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     _cargarDatosInicio();
-    _enviarNotificacionBienvenida(); 
     
     // 1. Revisar estado inicial de red
     _verificarConexionInicial();
 
-    // 2. Escuchar cambios de red usando Connectivity Plus directamente
+    // 2. Escuchar cambios de red
     _conexionSubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
       if (mounted) {
         setState(() {
@@ -65,7 +68,7 @@ class _HomeState extends State<Home> {
 
   @override
   void dispose() {
-    _conexionSubscription.cancel(); // 🟢 Limpiamos la escucha al salir
+    _conexionSubscription.cancel(); 
     super.dispose();
   }
 
@@ -93,9 +96,11 @@ class _HomeState extends State<Home> {
       final perfil = await LocalDatabase.instance.obtenerPerfil();
       final evaluaciones = await LocalDatabase.instance.listarEvaluaciones();
 
+      // 🟢 Retorno temprano: Si el widget se está cerrando, abortar la carga.
+      if (!mounted) return;
+
       final prefs = await SharedPreferences.getInstance();
       String? fechaGuardada = prefs.getString('fecha_ancla_usuario');
-      
       if (fechaGuardada == null) {
         _fechaAncla = DateTime.now(); 
         await prefs.setString('fecha_ancla_usuario', _fechaAncla!.toIso8601String());
@@ -103,14 +108,40 @@ class _HomeState extends State<Home> {
         _fechaAncla = DateTime.parse(fechaGuardada);
       }
 
-      if (!mounted) return;
+      // 🟢 NUEVA LÓGICA: Verificar si ya hizo una evaluación HOY
+      bool evaluoHoy = false;
+      if (evaluaciones.isNotEmpty) {
+        try {
+          final fechaUltimaEval = DateTime.parse(evaluaciones.first.fechaHora);
+          final ahora = DateTime.now();
+          
+          if (fechaUltimaEval.year == ahora.year && 
+              fechaUltimaEval.month == ahora.month && 
+              fechaUltimaEval.day == ahora.day) {
+            evaluoHoy = true;
+          }
+        } catch (_) {
+          // Ignorar error de parseo si ocurre
+        }
+      }
+
+      // 🟢 Disparar la notificación SOLO si no ha evaluado hoy y no se ha mostrado aún en la sesión global
+// 🟢 Disparar la notificación SOLO si no ha evaluado hoy y no se ha mostrado aún en la sesión global
+      if (!evaluoHoy && !Home.notificacionMostradaEnSesion) {
+        
+        // 🟢 DOBLE VERIFICACIÓN: Solo enviar si esta pantalla no está siendo destruida
+        if (ModalRoute.of(context)?.isActive == true) {
+          _enviarNotificacionBienvenida();
+          Home.notificacionMostradaEnSesion = true; // Actualizamos el estado global
+        }
+        
+      }
 
       setState(() {
         _perfil = perfil;
         _ultimaEvaluacion = evaluaciones.isNotEmpty ? evaluaciones.first : null;
         _cargando = false;
       });
-      
       await _cargarNotificaciones();
 
     } catch (e) {
@@ -123,7 +154,7 @@ class _HomeState extends State<Home> {
   }
 
   String get _nombreVisible => _perfil?.nombre.trim().isNotEmpty == true ? _perfil!.nombre.trim() : 'Gestante';
-
+  
   String get _semanasTexto {
     final semanasIngresadas = _perfil?.semanasGestacion;
     if (semanasIngresadas == null || _fechaAncla == null) return '--';
@@ -190,11 +221,9 @@ class _HomeState extends State<Home> {
     if (titulo == 'Recordatorios') {
       return 'img/recordatorios_img.png';
     }
-
     if (titulo == 'Aprende') {
       return 'img/aprender_img.png';
     }
-
     return 'img/historial_img.png';
   }
 
@@ -226,8 +255,6 @@ class _HomeState extends State<Home> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          
-                          // 🟢 BOTÓN DINÁMICO: Sincronizado vs Modo offline
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
@@ -262,9 +289,17 @@ class _HomeState extends State<Home> {
                         ],
                       ),
                       const SizedBox(height: 15),
-                      const Text('Buenos días,', style: TextStyle(color: Color(0xFF72CA76), fontSize: 18)),
+                      const Text(
+                        'Hola,', 
+                        style: TextStyle(
+                          color: Color(0xFF72CA76), 
+                          fontSize: 22, 
+                          fontWeight: FontWeight.bold 
+                        )
+                      ),
                       Text(_nombreVisible, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 15),
+                      
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(color: const Color(0xFF5A845C), borderRadius: BorderRadius.circular(10)),
@@ -298,6 +333,7 @@ class _HomeState extends State<Home> {
                         const SizedBox(height: 15),
                         _tarjetaHistorial(),
                         const SizedBox(height: 15),
+    
                         Row(
                           children: [
                             Expanded(child: _tarjetaCuadrada(context, 'Recordatorios')),
@@ -479,7 +515,6 @@ class _HomeState extends State<Home> {
 
   Widget _tarjetaCuadrada(BuildContext context, String titulo) {
     final imagen = _imagenTarjeta(titulo);
-
     return GestureDetector(
       onTap: () async {
         if (titulo == 'Recordatorios') {
@@ -500,7 +535,7 @@ class _HomeState extends State<Home> {
         }
       },
       child: Container(
-        height: 120,
+        height: 135,
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: Colors.grey.shade400),
@@ -516,37 +551,40 @@ class _HomeState extends State<Home> {
         child: Column(
           children: [
             Expanded(
-              flex: 6,
+              flex: 8,
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                child: Image.asset(
-                  imagen,
-                  width: double.infinity,
-                  height: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey.shade200,
-                      child: const Center(
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey,
+                child: Padding (
+                  padding: const EdgeInsets.only(top: 10, bottom: 5),
+                  child: Image.asset(
+                    imagen,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.fitHeight,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: const Center(
+                          child: Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
+              )             
             ),
             Expanded(
-              flex: 4,
+              flex: 3,
               child: Center(
                 child: Text(
                   titulo,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'serif',
                   ),
@@ -577,7 +615,7 @@ class _HomeState extends State<Home> {
             ),
             const Divider(),
             if (_notificacionesPendientes == 0)
-              Expanded(child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.notifications_off, size: 50, color: Colors.grey.shade300), const SizedBox(height: 10), Text("¡Todo al día! No tienes notificaciones.", style: TextStyle(color: Colors.grey.shade600))])),)
+              Expanded(child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.notifications_off, size: 50, color: Colors.grey.shade300), const SizedBox(height: 10), Text("¡Todo al día!\nNo tienes notificaciones.", style: TextStyle(color: Colors.grey.shade600))])),)
             else
              Expanded(
                 child: ListView.builder(
@@ -620,7 +658,6 @@ class _HomeState extends State<Home> {
     
     int pendientes = 0;
     List<String> mensajes = [];
-
     if (pastillasString != null && pastillasString.isNotEmpty) {
       final List<dynamic> jsonPastillas = List.from(json.decode(pastillasString));
       for (var item in jsonPastillas) {
@@ -648,4 +685,5 @@ class _HomeState extends State<Home> {
       });
     }
   }
+  
 }

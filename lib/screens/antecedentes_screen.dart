@@ -6,6 +6,7 @@ import '../models/perfil_gestante.dart';
 import '../services/api_client.dart';
 import '../services/session_state_service.dart';
 import 'home_screen.dart';
+import 'indicador_conexion.dart'; // NUEVO IMPORT AÑADIDO
 
 class AntecedentesScreen extends StatefulWidget {
   final bool esEdicion;
@@ -281,26 +282,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6EA377),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
-                  SizedBox(width: 8),
-                  Text(
-                    'Modo offline',
-                    style: TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          mainAxisAlignment: MainAxisAlignment.end, 
         ),
       ),
       body: Column(

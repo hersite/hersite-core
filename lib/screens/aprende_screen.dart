@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'home_screen.dart'; 
 import 'historial_screen.dart'; 
 import 'perfil_screen.dart';
+import 'indicador_conexion.dart';
 
 class AprendeScreen extends StatefulWidget {
   const AprendeScreen({super.key});
@@ -55,19 +56,7 @@ class _AprendeScreenState extends State<AprendeScreen> {
         automaticallyImplyLeading: false, 
         title: Row(
           mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFF6EA377), borderRadius: BorderRadius.circular(15)),
-              child: const Row(
-                children: [
-                  Icon(Icons.circle, color: Color(0xFF2CE42C), size: 12),
-                  SizedBox(width: 8),
-                  Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 13)),
-                ],
-              ),
-            ),
-          ],
+
         ),
       ),
       body: Column(
