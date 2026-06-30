@@ -186,6 +186,18 @@ class _HomeState extends State<Home> {
     }
   }
 
+  String _imagenTarjeta(String titulo) {
+    if (titulo == 'Recordatorios') {
+      return 'img/recordatorios_img.png';
+    }
+
+    if (titulo == 'Aprende') {
+      return 'img/aprender_img.png';
+    }
+
+    return 'img/historial_img.png';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_cargando) {
@@ -398,16 +410,67 @@ class _HomeState extends State<Home> {
   Widget _tarjetaHistorial() {
     return GestureDetector(
       onTap: () async {
-        await Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialScreen()));
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const HistorialScreen()),
+        );
         _cargarDatosInicio();
       },
       child: Container(
-        height: 110, width: double.infinity,
-        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]),
+        height: 110,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
         child: Row(
           children: [
-            Expanded(flex: 4, child: Container(decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: const BorderRadius.horizontal(left: Radius.circular(12))), child: const Center(child: Text('Espacio\nImagen', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12))))),
-            const Expanded(flex: 6, child: Center(child: Text('Historial', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, fontFamily: 'serif')))),
+            Expanded(
+              flex: 4,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(12),
+                ),
+                child: Image.asset(
+                  'img/historial_img.png',
+                  height: double.infinity,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const Expanded(
+              flex: 6,
+              child: Center(
+                child: Text(
+                  'Historial',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'serif',
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -415,22 +478,81 @@ class _HomeState extends State<Home> {
   }
 
   Widget _tarjetaCuadrada(BuildContext context, String titulo) {
+    final imagen = _imagenTarjeta(titulo);
+
     return GestureDetector(
-      onTap: () async { 
+      onTap: () async {
         if (titulo == 'Recordatorios') {
-          await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecordatoriosScreen()));
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const RecordatoriosScreen(),
+            ),
+          );
           _cargarNotificaciones();
         } else if (titulo == 'Aprende') {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const AprendeScreen()));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AprendeScreen(),
+            ),
+          );
         }
       },
       child: Container(
         height: 120,
-        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))]),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
         child: Column(
           children: [
-            Expanded(flex: 6, child: Container(width: double.infinity, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: const BorderRadius.vertical(top: Radius.circular(12))), child: const Center(child: Text('Espacio Imagen', style: TextStyle(color: Colors.grey, fontSize: 12))))),
-            Expanded(flex: 4, child: Center(child: Text(titulo, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'serif')))),
+            Expanded(
+              flex: 6,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                child: Image.asset(
+                  imagen,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey.shade200,
+                      child: const Center(
+                        child: Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 4,
+              child: Center(
+                child: Text(
+                  titulo,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'serif',
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

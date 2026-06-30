@@ -41,6 +41,9 @@ flutter:
   uses-material-design: true
   assets:
     - img/logo_tesis.png
+    - img/historial_img.png
+    - img/aprender_img.png
+    - img/recordatorios_img.png
     - assets/ml/modelo_riesgo_materno.onnx
     - assets/ml/modelo_riesgo_materno_features.json
     - assets/ml/caso_prueba_flutter.json

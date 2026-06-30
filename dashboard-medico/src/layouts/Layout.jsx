@@ -37,6 +37,7 @@ export default function Layout() {
         setEstadoSistema(response);
       } catch (err) {
         if (cancelado) return;
+        console.error("Error al cargar el estado:", err); 
       }
     }
 

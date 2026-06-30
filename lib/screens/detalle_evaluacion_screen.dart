@@ -52,7 +52,10 @@ class DetalleEvaluacionScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: const BoxDecoration(
                       color: Color(0xFF6EA377),
                       borderRadius: BorderRadius.horizontal(
@@ -65,7 +68,10 @@ class DetalleEvaluacionScreen extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     child: const Text(
                       'QU',
                       style: TextStyle(color: Color(0xFF6EA377), fontSize: 12),
@@ -111,7 +117,10 @@ class DetalleEvaluacionScreen extends StatelessWidget {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(30),
@@ -180,8 +189,14 @@ class DetalleEvaluacionScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _buildFilaInfo('Fecha y hora', fechaTexto),
-                  _buildFilaInfo('Estado local', _textoSync(evaluacion.syncStatus)),
-                  _buildFilaInfo('Nivel registrado', evaluacion.nivelRiesgo),
+                  _buildFilaInfo(
+                    'Estado local',
+                    _textoSync(evaluacion.syncStatus),
+                  ),
+                  _buildFilaInfo(
+                    'Nivel registrado',
+                    _textoNivelRiesgo(evaluacion.nivelRiesgo),
+                  ),
                 ],
               ),
             ),
@@ -195,26 +210,35 @@ class DetalleEvaluacionScreen extends StatelessWidget {
               titulo: 'Síntomas detectados',
               child: evaluacion.sintomasDetectados.isEmpty
                   ? const Text(
-                      'Ninguno o "Me siento bien"',
-                      style: TextStyle(color: Colors.grey),
+                      'Ninguno. La gestante registró que se sentía bien.',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 13,
+                        fontFamily: 'Poltawski Nowy',
+                      ),
                     )
                   : Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: evaluacion.sintomasDetectados.map((sintoma) {
+                        final sintomaTexto = _normalizarSintoma(sintoma);
+
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: estilo['colorFondo'],
                             borderRadius: BorderRadius.circular(15),
                             border: Border.all(color: estilo['colorBorde']),
                           ),
                           child: Text(
-                            sintoma,
+                            sintomaTexto,
                             style: TextStyle(
                               color: estilo['colorTexto'],
                               fontSize: 13,
-                              fontFamily: 'Poly',
+                              fontFamily: 'Poltawski Nowy',
                             ),
                           ),
                         );
@@ -225,26 +249,21 @@ class DetalleEvaluacionScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // =========================
-            // PRESIÓN ACTUAL Y ANÁLISIS
+            // SIGNOS VITALES
             // =========================
             _buildSeccion(
               titulo: 'Signos vitales registrados',
               child: Column(
                 children: [
                   _buildFilaInfo(
-                    'Presión sistólica',
-                    '${evaluacion.formData['Presion_Sistolica'] ?? '--'}',
-                  ),
-                  _buildFilaInfo(
-                    'Presión diastólica',
-                    '${evaluacion.formData['Presion_Diastolica'] ?? '--'}',
+                    'Presión actual',
+                    _textoPresionActual(evaluacion.formData),
                   ),
                   _buildFilaInfo(
                     'Presión basal',
-                    '${evaluacion.formData['Presion_Basal_Sistolica'] ?? '--'}/${evaluacion.formData['Presion_Basal_Diastolica'] ?? '--'}',
+                    _textoPresionBasal(evaluacion.formData),
                   ),
                   const Divider(color: Colors.grey, height: 20),
-                  // AQUÍ INSERTAMOS TU NUEVA IDEA: EL MENSAJE DE ANÁLISIS DE PRESIÓN
                   _analizarPresion(evaluacion.formData),
                 ],
               ),
@@ -256,7 +275,7 @@ class DetalleEvaluacionScreen extends StatelessWidget {
             // PROBABILIDADES
             // =========================
             _buildSeccion(
-              titulo: 'Salida del modelo',
+              titulo: 'Probabilidades del modelo',
               child: Text(
                 _formatearProbabilidades(evaluacion.probabilidades),
                 style: const TextStyle(
@@ -297,71 +316,208 @@ class DetalleEvaluacionScreen extends StatelessWidget {
     );
   }
 
-  // --- NUEVA FUNCIÓN PARA ANALIZAR LA PRESIÓN ---
-  Widget _analizarPresion(Map<String, dynamic> data) {
-    final int? sistolicaActual = data['Presion_Sistolica'] is int ? data['Presion_Sistolica'] : null;
-    final int? diastolicaActual = data['Presion_Diastolica'] is int ? data['Presion_Diastolica'] : null;
-    final int? sistolicaBasal = data['Presion_Basal_Sistolica'] is int ? data['Presion_Basal_Sistolica'] : null;
-    final int? diastolicaBasal = data['Presion_Basal_Diastolica'] is int ? data['Presion_Basal_Diastolica'] : null;
+  // ============================================================
+  // PRESIÓN
+  // ============================================================
 
-    // Si falta algún dato, no podemos comparar
-    if (sistolicaActual == null || diastolicaActual == null || sistolicaBasal == null || diastolicaBasal == null) {
-      return const Text(
-        'Faltan datos de presión para realizar una comparación.',
-        style: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic),
+  int? _leerEntero(Map<String, dynamic> data, String key) {
+    final value = data[key];
+
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is double) {
+      return value.toInt();
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(value.toString());
+  }
+
+  bool _flagDisponible(Map<String, dynamic> data, String key) {
+    final value = data[key];
+
+    if (value == null) {
+      return false;
+    }
+
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is int) {
+      return value == 1;
+    }
+
+    if (value is double) {
+      return value.toInt() == 1;
+    }
+
+    if (value is num) {
+      return value.toInt() == 1;
+    }
+
+    return value.toString() == '1' || value.toString().toLowerCase() == 'true';
+  }
+
+  bool _tienePresionActualValida(Map<String, dynamic> data) {
+    final disponible = _flagDisponible(data, 'Presion_Actual_Disponible');
+    final sistolica = _leerEntero(data, 'Presion_Sistolica');
+    final diastolica = _leerEntero(data, 'Presion_Diastolica');
+
+    return disponible &&
+        sistolica != null &&
+        diastolica != null &&
+        sistolica > 0 &&
+        diastolica > 0;
+  }
+
+  bool _tienePresionBasalValida(Map<String, dynamic> data) {
+    final disponible = _flagDisponible(data, 'Presion_Basal_Disponible');
+    final sistolica = _leerEntero(data, 'Presion_Basal_Sistolica');
+    final diastolica = _leerEntero(data, 'Presion_Basal_Diastolica');
+
+    return disponible &&
+        sistolica != null &&
+        diastolica != null &&
+        sistolica > 0 &&
+        diastolica > 0;
+  }
+
+  String _textoPresionActual(Map<String, dynamic> data) {
+    if (!_tienePresionActualValida(data)) {
+      return 'No registrada';
+    }
+
+    final sistolica = _leerEntero(data, 'Presion_Sistolica')!;
+    final diastolica = _leerEntero(data, 'Presion_Diastolica')!;
+
+    return '$sistolica/$diastolica mmHg';
+  }
+
+  String _textoPresionBasal(Map<String, dynamic> data) {
+    if (!_tienePresionBasalValida(data)) {
+      return 'No registrada';
+    }
+
+    final sistolica = _leerEntero(data, 'Presion_Basal_Sistolica')!;
+    final diastolica = _leerEntero(data, 'Presion_Basal_Diastolica')!;
+
+    return '$sistolica/$diastolica mmHg';
+  }
+
+  Widget _analizarPresion(Map<String, dynamic> data) {
+    final tieneActual = _tienePresionActualValida(data);
+    final tieneBasal = _tienePresionBasalValida(data);
+
+    if (!tieneActual) {
+      return _buildMensajeInfo(
+        icono: Icons.info_outline,
+        color: const Color(0xFF6A6A6A),
+        fondo: const Color(0xFFF5F5F5),
+        borde: Colors.grey.shade400,
+        texto:
+            'No se registró presión actual en esta evaluación. Por ello, no se realiza comparación de presión.',
       );
     }
+
+    final sistolicaActual = _leerEntero(data, 'Presion_Sistolica')!;
+    final diastolicaActual = _leerEntero(data, 'Presion_Diastolica')!;
+
+    if (sistolicaActual >= 140 || diastolicaActual >= 90) {
+      return _buildMensajeInfo(
+        icono: Icons.warning_amber_rounded,
+        color: const Color(0xFFD33232),
+        fondo: const Color(0xFFFCE4E4),
+        borde: const Color(0xFFD33232),
+        texto:
+            'Alerta: La presión actual registrada es elevada. Se recomienda acudir al establecimiento de salud o solicitar ayuda.',
+      );
+    }
+
+    if (!tieneBasal) {
+      return _buildMensajeInfo(
+        icono: Icons.info_outline,
+        color: const Color(0xFFB69500),
+        fondo: const Color(0xFFFFF7D8),
+        borde: const Color(0xFFF9E37F),
+        texto:
+            'Se registró presión actual, pero no presión basal. No es posible comparar con la presión habitual.',
+      );
+    }
+
+    final sistolicaBasal = _leerEntero(data, 'Presion_Basal_Sistolica')!;
+    final diastolicaBasal = _leerEntero(data, 'Presion_Basal_Diastolica')!;
 
     final difSistolica = sistolicaActual - sistolicaBasal;
     final difDiastolica = diastolicaActual - diastolicaBasal;
 
-    // Criterio de riesgo: Aumento de 30mmHg en sistólica o 15mmHg en diastólica
     if (difSistolica >= 30 || difDiastolica >= 15) {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFCE4E4),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFD33232)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Color(0xFFD33232)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Alerta: Tu presión ha aumentado significativamente respecto a tu basal (+${difSistolica > 0 ? difSistolica : 0} sis / +${difDiastolica > 0 ? difDiastolica : 0} dia).',
-                style: const TextStyle(color: Color(0xFF970A0A), fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      );
-    } else {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEEFFEF),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF4C924F)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Color(0xFF4C924F)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Tu presión se mantiene dentro de los márgenes seguros respecto a tu estado antes del embarazo.',
-                style: const TextStyle(color: Color(0xFF316533), fontSize: 13),
-              ),
-            ),
-          ],
-        ),
+      return _buildMensajeInfo(
+        icono: Icons.warning_amber_rounded,
+        color: const Color(0xFFD33232),
+        fondo: const Color(0xFFFCE4E4),
+        borde: const Color(0xFFD33232),
+        texto:
+            'Alerta: La presión aumentó significativamente respecto a la presión basal registrada.',
       );
     }
+
+    return _buildMensajeInfo(
+      icono: Icons.check_circle_outline,
+      color: const Color(0xFF4C924F),
+      fondo: const Color(0xFFEEFFEF),
+      borde: const Color(0xFF4C924F),
+      texto:
+          'La presión actual registrada no supera los umbrales de alerta y no muestra un aumento importante respecto a la presión basal.',
+    );
   }
 
-  // --- MÉTODOS AUXILIARES ORIGINALES ---
+  Widget _buildMensajeInfo({
+    required IconData icono,
+    required Color color,
+    required Color fondo,
+    required Color borde,
+    required String texto,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: fondo,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borde),
+      ),
+      child: Row(
+        children: [
+          Icon(icono, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poltawski Nowy',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // AUXILIARES VISUALES
+  // ============================================================
 
   Map<String, dynamic> _obtenerEstiloPorRiesgo(String nivelRiesgo) {
     if (nivelRiesgo == 'Riesgo_Alto') {
@@ -456,7 +612,7 @@ class DetalleEvaluacionScreen extends StatelessWidget {
 
   String _textoSync(String syncStatus) {
     if (syncStatus == 'sincronizado') {
-      return 'Sincronizado';
+      return 'Sincronizado con la obstetra';
     }
 
     if (syncStatus == 'pendiente') {
@@ -464,6 +620,22 @@ class DetalleEvaluacionScreen extends StatelessWidget {
     }
 
     return syncStatus;
+  }
+
+  String _textoNivelRiesgo(String nivelRiesgo) {
+    if (nivelRiesgo == 'Riesgo_Bajo') {
+      return 'Riesgo bajo';
+    }
+
+    if (nivelRiesgo == 'Riesgo_Medio') {
+      return 'Riesgo medio';
+    }
+
+    if (nivelRiesgo == 'Riesgo_Alto') {
+      return 'Riesgo alto';
+    }
+
+    return nivelRiesgo;
   }
 
   String _formatearFechaHora(String fechaIso) {
@@ -483,6 +655,43 @@ class DetalleEvaluacionScreen extends StatelessWidget {
     }
   }
 
+  String _normalizarSintoma(String sintoma) {
+    final limpio = sintoma.trim();
+
+    const equivalencias = {
+      'Taquicardia sostenida': 'Taquicardia sostenida',
+      'Cefalea intensa': 'Cefalea intensa',
+      'Alteración visual': 'Alteración visual',
+      'Zumbido oídos': 'Zumbido de oídos',
+      'Zumbido de oídos': 'Zumbido de oídos',
+      'Dolor hipocondrio derecho': 'Dolor en hipocondrio derecho',
+      'Dolor en hipocondrio derecho': 'Dolor en hipocondrio derecho',
+      'Dolor boca estómago': 'Dolor en boca del estómago',
+      'Dolor en boca del estómago': 'Dolor en boca del estómago',
+      'Hinchazón cara manos': 'Hinchazón en cara y manos',
+      'Hinchazón en cara y manos': 'Hinchazón en cara y manos',
+      'Sangrado vaginal': 'Sangrado vaginal',
+      'Mareo desmayo': 'Mareo o desmayo',
+      'Mareo o desmayo': 'Mareo o desmayo',
+      'Sudoración fría': 'Sudoración fría',
+      'Fiebre escalofríos': 'Fiebre o escalofríos',
+      'Fiebre o escalofríos': 'Fiebre o escalofríos',
+      'Hipotermia subjetiva': 'Sensación de hipotermia',
+      'Sensación de hipotermia': 'Sensación de hipotermia',
+      'Flujo vaginal fétido': 'Flujo vaginal fétido',
+      'Dolor abdominal bajo': 'Dolor abdominal bajo',
+      'Pérdida líquido amniótico': 'Pérdida de líquido amniótico',
+      'Pérdida de líquido amniótico': 'Pérdida de líquido amniótico',
+      'Confusión somnolencia': 'Confusión o somnolencia',
+      'Confusión o somnolencia': 'Confusión o somnolencia',
+      'Movimientos fetales disminuidos': 'Movimientos fetales disminuidos',
+      'Dificultad respirar': 'Dificultad para respirar',
+      'Dificultad para respirar': 'Dificultad para respirar',
+    };
+
+    return equivalencias[limpio] ?? limpio;
+  }
+
   String _formatearProbabilidades(dynamic probabilidades) {
     if (probabilidades == null) {
       return 'No se registraron probabilidades.';
@@ -497,9 +706,9 @@ class DetalleEvaluacionScreen extends StatelessWidget {
           final medio = (primeraFila[1] as num).toDouble();
           final alto = (primeraFila[2] as num).toDouble();
 
-          return 'P(Bajo):  ${(bajo * 100).toStringAsFixed(2)}%\n'
-              'P(Medio): ${(medio * 100).toStringAsFixed(2)}%\n'
-              'P(Alto):  ${(alto * 100).toStringAsFixed(2)}%';
+          return 'Riesgo bajo:  ${(bajo * 100).toStringAsFixed(2)}%\n'
+              'Riesgo medio: ${(medio * 100).toStringAsFixed(2)}%\n'
+              'Riesgo alto:  ${(alto * 100).toStringAsFixed(2)}%';
         }
 
         if (probabilidades.length >= 3) {
@@ -507,9 +716,9 @@ class DetalleEvaluacionScreen extends StatelessWidget {
           final medio = (probabilidades[1] as num).toDouble();
           final alto = (probabilidades[2] as num).toDouble();
 
-          return 'P(Bajo):  ${(bajo * 100).toStringAsFixed(2)}%\n'
-              'P(Medio): ${(medio * 100).toStringAsFixed(2)}%\n'
-              'P(Alto):  ${(alto * 100).toStringAsFixed(2)}%';
+          return 'Riesgo bajo:  ${(bajo * 100).toStringAsFixed(2)}%\n'
+              'Riesgo medio: ${(medio * 100).toStringAsFixed(2)}%\n'
+              'Riesgo alto:  ${(alto * 100).toStringAsFixed(2)}%';
         }
       }
 

@@ -75,6 +75,9 @@ def _gestante_to_dict(gestante: Gestante | None):
         "hipertension_previa": gestante.hipertension_previa,
         "preeclampsia_previa": gestante.preeclampsia_previa,
         "anemia_gestacional": gestante.anemia_gestacional,
+        "presion_basal_disponible": gestante.presion_basal_disponible,
+        "embarazo_multiple": gestante.embarazo_multiple,
+        "antecedente_hemorragia": gestante.antecedente_hemorragia,
         "presion_basal_sistolica": gestante.presion_basal_sistolica,
         "presion_basal_diastolica": gestante.presion_basal_diastolica,
     }
@@ -187,6 +190,14 @@ def _detectar_factores_clinicos(form_data: dict):
 
     if form_data.get("Cesarea_Previa") == 1:
         factores.append("Cesárea previa")
+
+    if form_data.get("Embarazo_Multiple") == 1:
+        factores.append("Embarazo múltiple")
+
+    if form_data.get("Antecedente_Hemorragia") == 1:
+        factores.append("Antecedente de hemorragia")
+
+    return factores
 
     return factores
 
@@ -317,14 +328,21 @@ def tendencias_resumen(
             }
         )
 
-    if not factores_frecuentes:
-        factores_frecuentes = [
+    for factor, total in contador_factores.most_common(8):
+        porcentaje = 0
+
+        if total_evaluaciones > 0:
+            porcentaje = round((total / total_evaluaciones) * 100, 1)
+
+        factores_frecuentes.append(
             {
-                "factor": "Sin factores de alarma frecuentes",
-                "total": 0,
-                "porcentaje": 0,
+                "factor": factor,
+                "total": total,
+                "porcentaje": porcentaje,
             }
-        ]
+        )
+
+    riesgo_predominante = "Sin datos"
 
     riesgo_predominante = "Sin datos"
 
@@ -403,7 +421,8 @@ def sistema_estado(
         },
         "mobile": {
             "origen": "flutter_offline",
-            "modelo": "LightGBM embebido en ONNX",
+            "modelo": "LightGBM v3.2 embebido en ONNX",
+            "features_modelo": 34,
             "almacenamiento_local": "SQLite + SQLCipher",
             "sincronizacion": "automática por conectividad",
         },
@@ -500,6 +519,9 @@ def recibir_evaluacion(
                 hipertension_previa=payload.perfil.hipertension_previa,
                 preeclampsia_previa=payload.perfil.preeclampsia_previa,
                 anemia_gestacional=payload.perfil.anemia_gestacional,
+                presion_basal_disponible=payload.perfil.presion_basal_disponible,
+                embarazo_multiple=payload.perfil.embarazo_multiple,
+                antecedente_hemorragia=payload.perfil.antecedente_hemorragia,
                 presion_basal_sistolica=payload.perfil.presion_basal_sistolica,
                 presion_basal_diastolica=payload.perfil.presion_basal_diastolica,
             )
@@ -518,6 +540,9 @@ def recibir_evaluacion(
             gestante.hipertension_previa = payload.perfil.hipertension_previa
             gestante.preeclampsia_previa = payload.perfil.preeclampsia_previa
             gestante.anemia_gestacional = payload.perfil.anemia_gestacional
+            gestante.presion_basal_disponible = payload.perfil.presion_basal_disponible
+            gestante.embarazo_multiple = payload.perfil.embarazo_multiple
+            gestante.antecedente_hemorragia = payload.perfil.antecedente_hemorragia
             gestante.presion_basal_sistolica = payload.perfil.presion_basal_sistolica
             gestante.presion_basal_diastolica = payload.perfil.presion_basal_diastolica
 
@@ -625,7 +650,7 @@ def listar_gestantes(
     gestantes = session.exec(
         select(Gestante).order_by(Gestante.id.desc())
     ).all()
-    return gestantes
+    return [_gestante_to_dict(g) for g in gestantes]
 
 
 @app.get("/api/gestantes/{gestante_id}/evaluaciones")
@@ -682,6 +707,9 @@ def registrar_perfil(
             hipertension_previa=perfil.hipertension_previa,
             preeclampsia_previa=perfil.preeclampsia_previa,
             anemia_gestacional=perfil.anemia_gestacional,
+            presion_basal_disponible=perfil.presion_basal_disponible,
+            embarazo_multiple=perfil.embarazo_multiple,
+            antecedente_hemorragia=perfil.antecedente_hemorragia,
             presion_basal_sistolica=perfil.presion_basal_sistolica,
             presion_basal_diastolica=perfil.presion_basal_diastolica,
         )
@@ -698,6 +726,9 @@ def registrar_perfil(
         gestante.hipertension_previa = perfil.hipertension_previa
         gestante.preeclampsia_previa = perfil.preeclampsia_previa
         gestante.anemia_gestacional = perfil.anemia_gestacional
+        gestante.presion_basal_disponible = perfil.presion_basal_disponible
+        gestante.embarazo_multiple = perfil.embarazo_multiple
+        gestante.antecedente_hemorragia = perfil.antecedente_hemorragia
         gestante.presion_basal_sistolica = perfil.presion_basal_sistolica
         gestante.presion_basal_diastolica = perfil.presion_basal_diastolica
 

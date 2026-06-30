@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  TrendingUp,
+  //TrendingUp,
   AlertCircle,
   RefreshCw,
   HeartPulse,
@@ -10,8 +10,8 @@ import {
   BarChart2
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
+  //LineChart,
+  //Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -66,6 +66,7 @@ export default function Tendencias() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line
     cargarTendencias();
   }, []);
 
@@ -78,45 +79,81 @@ export default function Tendencias() {
   const porcentajeMedio = calcularPorcentaje(riesgos.medio, totalEvaluaciones);
 
   const dataRadarComplicaciones = useMemo(() => {
-    return [
-      { subject: 'Hipertensión Inducida', A: calcularPorcentaje(factoresAPI.find(f => f.factor.toLowerCase().includes('presion'))?.total || 45, totalEvaluaciones) || 60, fullMark: 100 },
-      { subject: 'Riesgo Hemorrágico', A: calcularPorcentaje(factoresAPI.find(f => f.factor.toLowerCase().includes('sangrado'))?.total || 30, totalEvaluaciones) || 40, fullMark: 100 },
-      { subject: 'Riesgo Infeccioso', A: calcularPorcentaje(factoresAPI.find(f => f.factor.toLowerCase().includes('fiebre') || f.factor.toLowerCase().includes('infeccion'))?.total || 15, totalEvaluaciones) || 20, fullMark: 100 },
-      { subject: 'Parto Prematuro', A: 35, fullMark: 100 }, 
-      { subject: 'Anemia / Desnutrición', A: 50, fullMark: 100 }, 
-      { subject: 'Alteraciones Metabólicas', A: 25, fullMark: 100 }, 
+    if (!factoresAPI.length || totalEvaluaciones <= 0) {
+      return [];
+    }
+
+    const buscarTotal = (palabrasClave) => {
+      return factoresAPI
+        .filter((f) => {
+          const nombre = String(f.factor || '').toLowerCase();
+          return palabrasClave.some((palabra) => nombre.includes(palabra));
+        })
+        .reduce((acc, f) => acc + (Number(f.total) || 0), 0);
+    };
+
+    const datos = [
+      {
+        subject: 'Hipertensión / presión',
+        A: calcularPorcentaje(
+          buscarTotal(['presion', 'presión', 'hipertension', 'hipertensión', 'preeclampsia']),
+          totalEvaluaciones,
+        ),
+        fullMark: 100,
+      },
+      {
+        subject: 'Hemorragia',
+        A: calcularPorcentaje(
+          buscarTotal(['sangrado', 'hemorragia']),
+          totalEvaluaciones,
+        ),
+        fullMark: 100,
+      },
+      {
+        subject: 'Infección / sepsis',
+        A: calcularPorcentaje(
+          buscarTotal(['fiebre', 'infeccion', 'infección', 'flujo', 'fetido', 'fétido']),
+          totalEvaluaciones,
+        ),
+        fullMark: 100,
+      },
+      {
+        subject: 'Compromiso fetal',
+        A: calcularPorcentaje(
+          buscarTotal(['movimientos', 'liquido', 'líquido', 'amniótico', 'amniotico']),
+          totalEvaluaciones,
+        ),
+        fullMark: 100,
+      },
+      {
+        subject: 'Compromiso neurológico',
+        A: calcularPorcentaje(
+          buscarTotal(['cefalea', 'visual', 'zumbido', 'confusión', 'confusion', 'somnolencia']),
+          totalEvaluaciones,
+        ),
+        fullMark: 100,
+      },
     ];
+
+    return datos;
   }, [factoresAPI, totalEvaluaciones]);
 
   const dataEvolucionClinica = useMemo(() => {
-    if (tendenciaMensual.length === 0) {
-      return [
-        { mes: 'Ene', alto: 2, medio: 5, bajo: 12 },
-        { mes: 'Feb', alto: 4, medio: 8, bajo: 15 },
-        { mes: 'Mar', alto: 7, medio: 12, bajo: 25 },
-        { mes: 'Abr', alto: 3, medio: 6, bajo: 18 },
-        { mes: 'May', alto: 5, medio: 9, bajo: 20 },
-      ];
-    }
-    return tendenciaMensual;
+    return tendenciaMensual || [];
   }, [tendenciaMensual]);
 
   const factoresClinicos = useMemo(() => {
-    if (factoresAPI.length > 0) {
-      const colores = ['#ef4444', '#f97316', '#eab308', '#10b981', '#06b6d4'];
-      return factoresAPI.slice(0, 5).map((f, i) => ({
-        nombre: f.factor,
-        total: f.total,
-        color: colores[i] || '#cbd5e1'
-      }));
+    if (!factoresAPI.length) {
+      return [];
     }
-    return [
-      { nombre: 'Presión Elevada', total: 45, color: '#ef4444' },
-      { nombre: 'Sangrado', total: 32, color: '#f97316' },
-      { nombre: 'Cefalea Intensa', total: 28, color: '#eab308' },
-      { nombre: 'Fiebre', total: 15, color: '#10b981' },
-      { nombre: 'Dolor Abdominal', total: 10, color: '#06b6d4' },
-    ];
+
+    const colores = ['#ef4444', '#f97316', '#eab308', '#10b981', '#06b6d4'];
+
+    return factoresAPI.slice(0, 5).map((f, i) => ({
+      nombre: f.factor,
+      total: Number(f.total) || 0,
+      color: colores[i] || '#cbd5e1',
+    }));
   }, [factoresAPI]);
 
   if (loading) {
@@ -237,15 +274,52 @@ export default function Tendencias() {
               </div>
 
               <div className="min-h-0 w-full flex-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={dataRadarComplicaciones}>
-                    <PolarGrid stroke={isDark ? '#334155' : '#e2e8f0'} />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 10, fontWeight: 600 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: isDark ? '#475569' : '#cbd5e1', fontSize: 10 }} />
-                    <Radar name="Incidencia Relativa" dataKey="A" stroke="#059669" fill="#10b981" fillOpacity={isDark ? 0.4 : 0.2} strokeWidth={2} />
-                    <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#f8fafc' : '#0f172a', borderRadius: '12px', fontSize: '12px' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
+                {dataRadarComplicaciones.length === 0 ? (
+                  <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-6 text-center">
+                    <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                      Aún no hay suficientes factores clínicos registrados para construir el perfil poblacional.
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={dataRadarComplicaciones}>
+                      <PolarGrid stroke={isDark ? '#334155' : '#e2e8f0'} />
+                      <PolarAngleAxis
+                        dataKey="subject"
+                        tick={{
+                          fill: isDark ? '#94a3b8' : '#64748b',
+                          fontSize: 10,
+                          fontWeight: 600,
+                        }}
+                      />
+                      <PolarRadiusAxis
+                        angle={30}
+                        domain={[0, 100]}
+                        tick={{
+                          fill: isDark ? '#475569' : '#cbd5e1',
+                          fontSize: 10,
+                        }}
+                      />
+                      <Radar
+                        name="Incidencia relativa"
+                        dataKey="A"
+                        stroke="#059669"
+                        fill="#10b981"
+                        fillOpacity={isDark ? 0.4 : 0.2}
+                        strokeWidth={2}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: isDark ? '#0f172a' : '#ffffff',
+                          borderColor: isDark ? '#1e293b' : '#e2e8f0',
+                          color: isDark ? '#f8fafc' : '#0f172a',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </div>
 
@@ -258,27 +332,35 @@ export default function Tendencias() {
               </div>
 
               <div className="min-h-0 w-full flex-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dataEvolucionClinica} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorAlto" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorMedio" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
-                    <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#f8fafc' : '#0f172a', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                    <Area type="monotone" name="Riesgo Alto" dataKey="alto" stroke="#ef4444" fillOpacity={1} fill="url(#colorAlto)" strokeWidth={2} />
-                    <Area type="monotone" name="Riesgo Medio" dataKey="medio" stroke="#f97316" fillOpacity={1} fill="url(#colorMedio)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {dataEvolucionClinica.length === 0 ? (
+                  <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-6 text-center">
+                    <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                      Aún no hay suficientes evaluaciones sincronizadas para mostrar una tendencia mensual.
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dataEvolucionClinica} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorAlto" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorMedio" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
+                      <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#f8fafc' : '#0f172a', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Area type="monotone" name="Riesgo Alto" dataKey="alto" stroke="#ef4444" fillOpacity={1} fill="url(#colorAlto)" strokeWidth={2} />
+                      <Area type="monotone" name="Riesgo Medio" dataKey="medio" stroke="#f97316" fillOpacity={1} fill="url(#colorMedio)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </div>
 
@@ -296,19 +378,27 @@ export default function Tendencias() {
             </div>
 
             <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={factoresClinicos} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="nombre" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }} width={140} />
-                  <Tooltip cursor={{ fill: isDark ? '#1e293b' : '#f8fafc' }} contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#f8fafc' : '#0f172a', borderRadius: '12px' }} formatter={(value) => [`${value} incidencias registradas`, 'Total']} />
-                  <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={24}>
-                    {factoresClinicos.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {factoresClinicos.length === 0 ? (
+                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-6 text-center">
+                  <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                    Aún no hay factores clínicos frecuentes para mostrar.
+                  </p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={factoresClinicos} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="nombre" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }} width={140} />
+                    <Tooltip cursor={{ fill: isDark ? '#1e293b' : '#f8fafc' }} contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#f8fafc' : '#0f172a', borderRadius: '12px' }} formatter={(value) => [`${value} incidencias registradas`, 'Total']} />
+                    <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={24}>
+                      {factoresClinicos.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 

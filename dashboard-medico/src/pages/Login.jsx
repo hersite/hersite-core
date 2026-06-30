@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, User, ShieldCheck } from 'lucide-react';
+import { ArrowRight, AlertTriangle, Lock, User, ShieldCheck } from 'lucide-react';
 
 import logoTesis from '../assets/logo_tesis.png';
 import { existeSesionWeb, iniciarSesionWeb } from '../services/auth';
@@ -39,7 +39,7 @@ export default function Login() {
       await iniciarSesionWeb({ dni, pin });
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'No se pudo iniciar sesión.');
       setIsLoading(false);
     }
   };
@@ -175,7 +175,7 @@ export default function Login() {
             <div className="mt-10 border-t border-slate-100 pt-8 text-center md:text-left">
               <p className="text-[10px] leading-relaxed text-slate-400">
                 Módulo web exclusivo para personal de salud autorizado. <br className="hidden md:block"/>
-                <span className="font-semibold text-slate-500">Validación de credenciales en entorno de desarrollo.</span>
+                <span className="font-semibold text-slate-500">Credenciales verificadas por el servidor.</span>
               </p>
             </div>
             

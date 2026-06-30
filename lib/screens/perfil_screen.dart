@@ -1,3 +1,4 @@
+import 'cambiar_pin_screen.dart';
 import 'package:flutter/material.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
@@ -52,6 +53,18 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   String _siNo(int valor) {
     return valor == 1 ? 'Sí' : 'No';
+  }
+
+  String _textoPresionBasal(PerfilGestante perfil) {
+    final noRegistrada = perfil.presionBasalDisponible == 0 ||
+        perfil.presionBasalSistolica <= 0 ||
+        perfil.presionBasalDiastolica <= 0;
+
+    if (noRegistrada) {
+      return 'No registrada';
+    }
+
+    return '${perfil.presionBasalSistolica}/${perfil.presionBasalDiastolica} mmHg';
   }
 
   String get _nombreVisible {
@@ -130,6 +143,18 @@ class _PerfilScreenState extends State<PerfilScreen> {
         builder: (context) => const InicioPrimer(),
       ),
       (Route<dynamic> route) => false,
+    );
+  }
+
+
+  void _mostrarMensaje(String mensaje, {bool error = false}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: error ? Colors.redAccent : const Color(0xFF4C924F),
+      ),
     );
   }
 
@@ -371,7 +396,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                     _buildDatoMedico(
                       'Presión basal',
-                      '${_perfil!.presionBasalSistolica}/${_perfil!.presionBasalDiastolica}',
+                      _textoPresionBasal(_perfil!),
                     ),
                     _buildDatoMedico(
                       'Cesárea previa',
@@ -389,6 +414,14 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     _buildDatoMedico(
                       'Anemia gestacional',
                       _siNo(_perfil!.anemiaGestacional),
+                    ),
+                    _buildDatoMedico(
+                      'Embarazo múltiple',
+                      _siNo(_perfil!.embarazoMultiple),
+                    ),
+                    _buildDatoMedico(
+                      'Antecedente de hemorragia',
+                      _siNo(_perfil!.antecedenteHemorragia),
                     ),
                     const SizedBox(height: 15),
                   ] else ...[
@@ -487,7 +520,28 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         ],
                       ),
                       TextButton(
-                        onPressed: () {},
+                        onPressed: _perfil == null
+                            ? null
+                            : () async {
+                                final actualizado = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => CambiarPinScreen(
+                                      perfil: _perfil!,
+                                    ),
+                                  ),
+                                );
+
+                                if (!mounted) return;
+
+                                if (actualizado == true) {
+                                  await _cargarPerfil();
+
+                                  if (!mounted) return;
+
+                                  _mostrarMensaje('PIN actualizado correctamente.');
+                                }
+                              },
                         child: const Text(
                           'Cambiar',
                           style: TextStyle(
@@ -502,37 +556,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
               ),
             ),
             const SizedBox(height: 30),
-
-            SizedBox(
-              width: double.infinity,
-              height: 45,
-              child: TextButton(
-                onPressed: () async {
-                  await LocalDatabase.instance.eliminarTodo();
-                  await SessionStateService.instance.clearSessionStateForDevOnly();
-                  PerfilGestanteTemp.limpiar();
-
-                  if (!context.mounted) return;
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Datos locales eliminados para prueba.'),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-
-                  _cargarPerfil();
-                },
-                child: const Text(
-                  'Limpiar datos locales (Dev)',
-                  style: TextStyle(
-                    color: Colors.orange,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
 
             
             // BOTÓN CERRAR SESIÓN (CONECTADO AL INICIO)
@@ -558,7 +581,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   ),
                 ),
                 child: const Text(
-                  'Cerrar sesión segura',
+                  'Cerrar sesión',
                   style: TextStyle(
                     color: Color(0xFF970A0A),
                     fontSize: 16,

@@ -86,10 +86,70 @@ function obtenerProbabilidadesModelo(detalle, riesgoClass) {
 
 function construirDetalleHistorial(evaluacion) {
   const sintomas = evaluacion.sintomas_detectados || [];
+
   if (sintomas.length > 0) {
-    return `${evaluacion.mensaje} Síntomas reportados: ${sintomas.join(', ')}.`;
+    const sintomasTexto = sintomas.map(normalizarSintoma).join(', ');
+    return `${evaluacion.mensaje} Síntomas reportados: ${sintomasTexto}.`;
   }
+
   return evaluacion.mensaje || 'Evaluación sincronizada desde la aplicación móvil.';
+}
+
+function normalizarSintoma(sintoma) {
+  const limpio = String(sintoma || '').trim();
+
+  const equivalencias = {
+    'Taquicardia sostenida': 'Taquicardia sostenida',
+    'Cefalea intensa': 'Cefalea intensa',
+    'Alteración visual': 'Alteración visual',
+    'Zumbido oídos': 'Zumbido de oídos',
+    'Zumbido de oídos': 'Zumbido de oídos',
+    'Dolor hipocondrio derecho': 'Dolor en hipocondrio derecho',
+    'Dolor en hipocondrio derecho': 'Dolor en hipocondrio derecho',
+    'Dolor boca estómago': 'Dolor en boca del estómago',
+    'Dolor en boca del estómago': 'Dolor en boca del estómago',
+    'Hinchazón cara manos': 'Hinchazón en cara y manos',
+    'Hinchazón en cara y manos': 'Hinchazón en cara y manos',
+    'Sangrado vaginal': 'Sangrado vaginal',
+    'Mareo desmayo': 'Mareo o desmayo',
+    'Mareo o desmayo': 'Mareo o desmayo',
+    'Sudoración fría': 'Sudoración fría',
+    'Fiebre escalofríos': 'Fiebre o escalofríos',
+    'Fiebre o escalofríos': 'Fiebre o escalofríos',
+    'Hipotermia subjetiva': 'Sensación de hipotermia',
+    'Sensación de hipotermia': 'Sensación de hipotermia',
+    'Flujo vaginal fétido': 'Flujo vaginal fétido',
+    'Dolor abdominal bajo': 'Dolor abdominal bajo',
+    'Pérdida líquido amniótico': 'Pérdida de líquido amniótico',
+    'Pérdida de líquido amniótico': 'Pérdida de líquido amniótico',
+    'Confusión somnolencia': 'Confusión o somnolencia',
+    'Confusión o somnolencia': 'Confusión o somnolencia',
+    'Movimientos fetales disminuidos': 'Movimientos fetales disminuidos',
+    'Dificultad respirar': 'Dificultad para respirar',
+    'Dificultad para respirar': 'Dificultad para respirar',
+  };
+
+  return equivalencias[limpio] || limpio;
+}
+
+function siNo(valor) {
+  return valor === 1 || valor === '1' || valor === true ? 'Sí' : 'No';
+}
+
+function textoPresionBasal(gestante) {
+  const disponible =
+    gestante.presion_basal_disponible === 1 ||
+    gestante.presion_basal_disponible === '1' ||
+    gestante.presion_basal_disponible === true;
+
+  const sistolica = Number(gestante.presion_basal_sistolica);
+  const diastolica = Number(gestante.presion_basal_diastolica);
+
+  if (!disponible || !Number.isFinite(sistolica) || !Number.isFinite(diastolica) || sistolica <= 0 || diastolica <= 0) {
+    return 'No registrada';
+  }
+
+  return `${sistolica}/${diastolica} mmHg`;
 }
 
 export default function Gestantes() {
@@ -131,6 +191,11 @@ export default function Gestantes() {
       edad: gestante.edad_materna ?? '--',
       semanas: gestante.semanas_gestacion ?? '--',
       numeroEmbarazos: gestante.numero_embarazos ?? '--',
+      presionBasalDisponible: gestante.presion_basal_disponible ?? 1,
+      presionBasalSistolica: gestante.presion_basal_sistolica,
+      presionBasalDiastolica: gestante.presion_basal_diastolica,
+      embarazoMultiple: gestante.embarazo_multiple ?? 0,
+      antecedenteHemorragia: gestante.antecedente_hemorragia ?? 0,
       tiempoCentroSalud: gestante.tiempo_centro_salud ?? 'No registrado',
       ultimaSync: ultimaEvaluacion ? calcularUltimaSync(ultimaEvaluacion.fecha_hora) : 'Sin evaluaciones',
       horasDesdeSync,
@@ -544,6 +609,28 @@ export default function Gestantes() {
                       <span className="font-medium text-slate-500 dark:text-slate-400">N.° embarazos</span>
                       <span className="font-bold text-slate-800 dark:text-slate-200">{seleccionada.numeroEmbarazos}</span>
                     </div>
+
+                    <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 py-1.5">
+                      <span className="font-medium text-slate-500 dark:text-slate-400">Presión basal</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        {textoPresionBasal({
+                          presion_basal_disponible: seleccionada.presionBasalDisponible,
+                          presion_basal_sistolica: seleccionada.presionBasalSistolica,
+                          presion_basal_diastolica: seleccionada.presionBasalDiastolica,
+                        })}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 py-1.5">
+                      <span className="font-medium text-slate-500 dark:text-slate-400">Embarazo múltiple</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{siNo(seleccionada.embarazoMultiple)}</span>
+                    </div>
+
+                    <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 py-1.5">
+                      <span className="font-medium text-slate-500 dark:text-slate-400">Ant. hemorragia</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{siNo(seleccionada.antecedenteHemorragia)}</span>
+                    </div>
+
                     <div className="flex justify-between py-1.5">
                       <span className="font-medium text-slate-500 dark:text-slate-400">Última sincronización</span>
                       <span className="font-bold text-slate-700 dark:text-slate-300">{seleccionada.ultimaSync}</span>

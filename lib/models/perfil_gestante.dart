@@ -10,11 +10,18 @@ class PerfilGestante {
   final int edadMaterna;
   final int semanasGestacion;
   final int numeroEmbarazos;
+
   final int cesareaPrevia;
   final int diabetes;
   final int hipertensionPrevia;
   final int preeclampsiaPrevia;
   final int anemiaGestacional;
+
+  // NUEVO MODELO V3.1
+  final int presionBasalDisponible;
+  final int embarazoMultiple;
+  final int antecedenteHemorragia;
+
   final int presionBasalSistolica;
   final int presionBasalDiastolica;
 
@@ -33,6 +40,9 @@ class PerfilGestante {
     required this.hipertensionPrevia,
     required this.preeclampsiaPrevia,
     required this.anemiaGestacional,
+    required this.presionBasalDisponible,
+    required this.embarazoMultiple,
+    required this.antecedenteHemorragia,
     required this.presionBasalSistolica,
     required this.presionBasalDiastolica,
   });
@@ -52,6 +62,9 @@ class PerfilGestante {
       'hipertension_previa': hipertensionPrevia,
       'preeclampsia_previa': preeclampsiaPrevia,
       'anemia_gestacional': anemiaGestacional,
+      'presion_basal_disponible': presionBasalDisponible,
+      'embarazo_multiple': embarazoMultiple,
+      'antecedente_hemorragia': antecedenteHemorragia,
       'presion_basal_sistolica': presionBasalSistolica,
       'presion_basal_diastolica': presionBasalDiastolica,
     };
@@ -73,6 +86,12 @@ class PerfilGestante {
       hipertensionPrevia: map['hipertension_previa'] as int,
       preeclampsiaPrevia: map['preeclampsia_previa'] as int,
       anemiaGestacional: map['anemia_gestacional'] as int,
+
+      // Defaults para compatibilidad con bases locales antiguas.
+      presionBasalDisponible: map['presion_basal_disponible'] as int? ?? 1,
+      embarazoMultiple: map['embarazo_multiple'] as int? ?? 0,
+      antecedenteHemorragia: map['antecedente_hemorragia'] as int? ?? 0,
+
       presionBasalSistolica: map['presion_basal_sistolica'] as int,
       presionBasalDiastolica: map['presion_basal_diastolica'] as int,
     );
@@ -88,6 +107,12 @@ class PerfilGestante {
       'Hipertension_Previa': hipertensionPrevia,
       'Preeclampsia_Previa': preeclampsiaPrevia,
       'Anemia_Gestacional': anemiaGestacional,
+
+      // NUEVAS VARIABLES DEL MODELO V3.1
+      'Presion_Basal_Disponible': presionBasalDisponible,
+      'Embarazo_Multiple': embarazoMultiple,
+      'Antecedente_Hemorragia': antecedenteHemorragia,
+
       'Presion_Basal_Sistolica': presionBasalSistolica,
       'Presion_Basal_Diastolica': presionBasalDiastolica,
     };
@@ -109,6 +134,15 @@ class PerfilGestante {
       hipertensionPrevia: map['Hipertension_Previa'] as int,
       preeclampsiaPrevia: map['Preeclampsia_Previa'] as int,
       anemiaGestacional: map['Anemia_Gestacional'] as int,
+
+      // Defaults temporales mientras actualizamos AntecedentesScreen.
+      presionBasalDisponible:
+          map['Presion_Basal_Disponible'] as int? ?? 1,
+      embarazoMultiple:
+          map['Embarazo_Multiple'] as int? ?? 0,
+      antecedenteHemorragia:
+          map['Antecedente_Hemorragia'] as int? ?? 0,
+
       presionBasalSistolica: map['Presion_Basal_Sistolica'] as int,
       presionBasalDiastolica: map['Presion_Basal_Diastolica'] as int,
     );

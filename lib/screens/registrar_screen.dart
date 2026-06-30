@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'test_model_screen.dart';
 import 'antecedentes_screen.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../services/pin_security_service.dart';
@@ -214,7 +213,6 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
                           : Text(widget.esEdicion ? 'Guardar cambios' : 'Continuar', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Poltawski Nowy')),
                     ),
                     const SizedBox(height: 12),
-                    if (!widget.esEdicion) TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TestModelScreen())), child: const Text('Probar modelo ML (Dev)')),
                   ],
                 ),
               ),

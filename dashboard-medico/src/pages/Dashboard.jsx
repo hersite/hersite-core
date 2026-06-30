@@ -67,9 +67,95 @@ export default function Dashboard() {
     return 0;
   };
 
+  const leerNumero = (data, campo) => {
+    const value = data?.[campo];
+
+    if (value === null || value === undefined) return null;
+
+    const numero = Number(value);
+
+    return Number.isFinite(numero) ? numero : null;
+  };
+
+  const leerFlag = (data, campo) => {
+    const value = data?.[campo];
+
+    return value === 1 || value === '1' || value === true || value === 'true';
+  };
+
+  const getFormData = (detalle, evalBase) => {
+    return detalle?.form_data || evalBase?.form_data || {};
+  };
+
+  const tienePresionActualRegistrada = (data) => {
+    const disponible = leerFlag(data, 'Presion_Actual_Disponible');
+    const sistolica = leerNumero(data, 'Presion_Sistolica');
+    const diastolica = leerNumero(data, 'Presion_Diastolica');
+
+    return disponible && sistolica !== null && diastolica !== null && sistolica > 0 && diastolica > 0;
+  };
+
+  const tienePresionBasalRegistrada = (data) => {
+    const disponible = leerFlag(data, 'Presion_Basal_Disponible');
+    const sistolica = leerNumero(data, 'Presion_Basal_Sistolica');
+    const diastolica = leerNumero(data, 'Presion_Basal_Diastolica');
+
+    return disponible && sistolica !== null && diastolica !== null && sistolica > 0 && diastolica > 0;
+  };
+
   const getPresion = (detalle, evalBase, campo) => {
-    const value = detalle?.form_data?.[campo] || evalBase?.form_data?.[campo];
-    return value ?? '--';
+    const data = getFormData(detalle, evalBase);
+
+    if (campo === 'Presion_Sistolica' || campo === 'Presion_Diastolica') {
+      if (!tienePresionActualRegistrada(data)) return 'No registrada';
+    }
+
+    if (campo === 'Presion_Basal_Sistolica' || campo === 'Presion_Basal_Diastolica') {
+      if (!tienePresionBasalRegistrada(data)) return 'No registrada';
+    }
+
+    const value = leerNumero(data, campo);
+
+    if (value === null || value <= 0) return 'No registrada';
+
+    return value;
+  };
+
+  const normalizarSintoma = (sintoma) => {
+    const limpio = String(sintoma || '').trim();
+
+    const equivalencias = {
+      'Taquicardia sostenida': 'Taquicardia sostenida',
+      'Cefalea intensa': 'Cefalea intensa',
+      'Alteración visual': 'Alteración visual',
+      'Zumbido oídos': 'Zumbido de oídos',
+      'Zumbido de oídos': 'Zumbido de oídos',
+      'Dolor hipocondrio derecho': 'Dolor en hipocondrio derecho',
+      'Dolor en hipocondrio derecho': 'Dolor en hipocondrio derecho',
+      'Dolor boca estómago': 'Dolor en boca del estómago',
+      'Dolor en boca del estómago': 'Dolor en boca del estómago',
+      'Hinchazón cara manos': 'Hinchazón en cara y manos',
+      'Hinchazón en cara y manos': 'Hinchazón en cara y manos',
+      'Sangrado vaginal': 'Sangrado vaginal',
+      'Mareo desmayo': 'Mareo o desmayo',
+      'Mareo o desmayo': 'Mareo o desmayo',
+      'Sudoración fría': 'Sudoración fría',
+      'Fiebre escalofríos': 'Fiebre o escalofríos',
+      'Fiebre o escalofríos': 'Fiebre o escalofríos',
+      'Hipotermia subjetiva': 'Sensación de hipotermia',
+      'Sensación de hipotermia': 'Sensación de hipotermia',
+      'Flujo vaginal fétido': 'Flujo vaginal fétido',
+      'Dolor abdominal bajo': 'Dolor abdominal bajo',
+      'Pérdida líquido amniótico': 'Pérdida de líquido amniótico',
+      'Pérdida de líquido amniótico': 'Pérdida de líquido amniótico',
+      'Confusión somnolencia': 'Confusión o somnolencia',
+      'Confusión o somnolencia': 'Confusión o somnolencia',
+      'Movimientos fetales disminuidos': 'Movimientos fetales disminuidos',
+      'Dificultad respirar': 'Dificultad para respirar',
+      'Dificultad para respirar': 'Dificultad para respirar',
+    };
+
+    return equivalencias[limpio] || limpio;
   };
 
   const reproducirAlertaSiEsNecesario = (gestantesActivas) => {
@@ -102,16 +188,27 @@ export default function Dashboard() {
   };
 
   const chartData = useMemo(() => {
-    const form = selectedDetail?.form_data || selectedItem?.ultima_evaluacion?.form_data || {};
-    const basalSys = form.Presion_Basal_Sistolica || 110;
-    const basalDia = form.Presion_Basal_Diastolica || 70;
-    const actualSys = form.Presion_Sistolica || basalSys;
-    const actualDia = form.Presion_Diastolica || basalDia;
+    const form = getFormData(selectedDetail, selectedItem?.ultima_evaluacion);
 
-    return [
-      { day: 'Basal', sys: basalSys, dia: basalDia },
-      { day: 'Actual', sys: actualSys, dia: actualDia },
-    ];
+    const data = [];
+
+    if (tienePresionBasalRegistrada(form)) {
+      data.push({
+        day: 'Basal',
+        sys: leerNumero(form, 'Presion_Basal_Sistolica'),
+        dia: leerNumero(form, 'Presion_Basal_Diastolica'),
+      });
+    }
+
+    if (tienePresionActualRegistrada(form)) {
+      data.push({
+        day: 'Actual',
+        sys: leerNumero(form, 'Presion_Sistolica'),
+        dia: leerNumero(form, 'Presion_Diastolica'),
+      });
+    }
+
+    return data;
   }, [selectedDetail, selectedItem]);
 
   const cargarDetalle = async (item) => {
@@ -242,6 +339,10 @@ export default function Dashboard() {
   const riskClass = getRiskClass(evalActiva?.nivel_riesgo);
   const colors = getRiskColors(riskClass);
   const probabilidad = getProbabilidad(selectedDetail, evalActiva);
+  const formActivo = getFormData(selectedDetail, evalActiva);
+  const hayPresionActual = tienePresionActualRegistrada(formActivo);
+  const presionSistolicaTexto = getPresion(selectedDetail, evalActiva, 'Presion_Sistolica');
+  const presionDiastolicaTexto = getPresion(selectedDetail, evalActiva, 'Presion_Diastolica');
 
   const getProfileInitialsColors = (rClass) => {
     if (rClass === 'danger') return 'border-red-200 dark:border-red-800/50 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
@@ -428,17 +529,21 @@ export default function Dashboard() {
     <div className="grid flex-1 grid-cols-2 gap-3 sm:gap-2">
       <div className="flex flex-col justify-center rounded-lg bg-slate-50 dark:bg-slate-800/50 p-4">
         <p className="mb-1 text-[10px] uppercase text-slate-400 dark:text-slate-500">Sistólica</p>
-        <p className={`text-4xl font-black ${getPresion(selectedDetail, evalActiva, 'Presion_Sistolica') === '--' ? 'text-slate-800 dark:text-white' : colors.text}`}>
-          {detailLoading ? '...' : getPresion(selectedDetail, evalActiva, 'Presion_Sistolica')}
-          <span className="ml-1 text-xs font-normal text-slate-400 dark:text-slate-500">mmHg</span>
+        <p className={`${hayPresionActual ? 'text-4xl' : 'text-sm'} font-black ${hayPresionActual ? colors.text : 'text-slate-400 dark:text-slate-500'}`}>
+          {detailLoading ? '...' : presionSistolicaTexto}
+          {hayPresionActual && (
+            <span className="ml-1 text-xs font-normal text-slate-400 dark:text-slate-500">mmHg</span>
+          )}
         </p>
       </div>
       
       <div className="flex flex-col justify-center rounded-lg bg-slate-50 dark:bg-slate-800/50 p-4">
         <p className="mb-1 text-[10px] uppercase text-slate-400 dark:text-slate-500">Diastólica</p>
-        <p className={`text-4xl font-black ${getPresion(selectedDetail, evalActiva, 'Presion_Diastolica') === '--' ? 'text-slate-800 dark:text-white' : colors.text}`}>
-          {detailLoading ? '...' : getPresion(selectedDetail, evalActiva, 'Presion_Diastolica')}
-          <span className="ml-1 text-xs font-normal text-slate-400 dark:text-slate-500">mmHg</span>
+        <p className={`${hayPresionActual ? 'text-4xl' : 'text-sm'} font-black ${hayPresionActual ? colors.text : 'text-slate-400 dark:text-slate-500'}`}>
+          {detailLoading ? '...' : presionDiastolicaTexto}
+          {hayPresionActual && (
+            <span className="ml-1 text-xs font-normal text-slate-400 dark:text-slate-500">mmHg</span>
+          )}
         </p>
       </div>
     </div>
@@ -454,35 +559,42 @@ export default function Dashboard() {
     
     {/* min-h-[160px] asegura que el gráfico tenga espacio aunque la pantalla sea pequeña */}
     <div className="flex-1 min-h-[160px] w-full mt-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData} margin={{ top: 25, right: 20, left: 20, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
-          
-          <XAxis 
-            dataKey="day" 
-            axisLine={false} 
-            tickLine={false} 
-            tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} 
-            padding={{ left: 20, right: 30 }} 
-            tickMargin={10} 
-          />
-          
-          <YAxis domain={['dataMin - 25', 'dataMax + 25']} hide />
-          
-          <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '8px', backgroundColor: isDark ? '#1e293b' : '#fff', border: isDark ? 'none' : '1px solid #e2e8f0', color: isDark ? '#fff' : '#000' }} />
-          
-          <Legend wrapperStyle={{ fontSize: '10px', top: -10 }} verticalAlign="top" align="right" />
-          
-          <Line type="monotone" name="Sistólica" dataKey="sys" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}>
-            <LabelList dataKey="sys" position="top" offset={8} fill="#ef4444" fontSize={11} fontWeight="bold" />
-          </Line>
-          
-          <Line type="monotone" name="Diastólica" dataKey="dia" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}>
-            <LabelList dataKey="dia" position="bottom" offset={8} fill="#f59e0b" fontSize={11} fontWeight="bold" />
-          </Line>
-          
-        </LineChart>
-      </ResponsiveContainer>
+      {chartData.length === 0 ? (
+        <div className="flex h-full min-h-[160px] items-center justify-center rounded-lg border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-4 text-center">
+          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+            No hay presión basal ni presión actual registrada para graficar.
+          </p>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 25, right: 20, left: 20, bottom: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
+
+            <XAxis 
+              dataKey="day" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} 
+              padding={{ left: 20, right: 30 }} 
+              tickMargin={10} 
+            />
+
+            <YAxis domain={['dataMin - 25', 'dataMax + 25']} hide />
+
+            <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '8px', backgroundColor: isDark ? '#1e293b' : '#fff', border: isDark ? 'none' : '1px solid #e2e8f0', color: isDark ? '#fff' : '#000' }} />
+
+            <Legend wrapperStyle={{ fontSize: '10px', top: -10 }} verticalAlign="top" align="right" />
+
+            <Line type="monotone" name="Sistólica" dataKey="sys" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}>
+              <LabelList dataKey="sys" position="top" offset={8} fill="#ef4444" fontSize={11} fontWeight="bold" />
+            </Line>
+
+            <Line type="monotone" name="Diastólica" dataKey="dia" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}>
+              <LabelList dataKey="dia" position="bottom" offset={8} fill="#f59e0b" fontSize={11} fontWeight="bold" />
+            </Line>
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   </div>
 
@@ -495,11 +607,15 @@ export default function Dashboard() {
                         <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Síntomas reportados</div>
                         <div className="flex flex-wrap gap-2">
                           {(evalActiva.sintomas_detectados || []).length > 0 ? (
-                            evalActiva.sintomas_detectados.map((s) => (
-                              <span key={s} className="rounded-md border border-red-100 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-2.5 py-1 text-[11px] font-semibold text-red-700 dark:text-red-400">
-                                {s}
-                              </span>
-                            ))
+                            evalActiva.sintomas_detectados.map((s) => {
+                              const sintomaTexto = normalizarSintoma(s);
+
+                              return (
+                                <span key={`${s}-${sintomaTexto}`} className="rounded-md border border-red-100 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-2.5 py-1 text-[11px] font-semibold text-red-700 dark:text-red-400">
+                                  {sintomaTexto}
+                                </span>
+                              );
+                            })
                           ) : (
                             <span className="text-xs text-slate-400 dark:text-slate-500">Sin síntomas de alarma.</span>
                           )}

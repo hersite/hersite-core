@@ -47,6 +47,9 @@ class ApiClient {
         'hipertension_previa': perfil.hipertensionPrevia,
         'preeclampsia_previa': perfil.preeclampsiaPrevia,
         'anemia_gestacional': perfil.anemiaGestacional,
+        'presion_basal_disponible': perfil.presionBasalDisponible,
+        'embarazo_multiple': perfil.embarazoMultiple,
+        'antecedente_hemorragia': perfil.antecedenteHemorragia,
         'presion_basal_sistolica': perfil.presionBasalSistolica,
         'presion_basal_diastolica': perfil.presionBasalDiastolica,
       };
@@ -100,50 +103,65 @@ class ApiClient {
       "celular": perfil.celular,
 
       "edad_materna": perfil.edadMaterna,
-
       "semanas_gestacion": perfil.semanasGestacion,
-
       "numero_embarazos": perfil.numeroEmbarazos,
 
       "cesarea_previa": perfil.cesareaPrevia,
-
       "diabetes": perfil.diabetes,
-
       "hipertension_previa": perfil.hipertensionPrevia,
-
       "preeclampsia_previa": perfil.preeclampsiaPrevia,
-
       "anemia_gestacional": perfil.anemiaGestacional,
 
-      "presion_basal_sistolica": perfil.presionBasalSistolica,
+      "presion_basal_disponible": perfil.presionBasalDisponible,
+      "embarazo_multiple": perfil.embarazoMultiple,
+      "antecedente_hemorragia": perfil.antecedenteHemorragia,
 
+      "presion_basal_sistolica": perfil.presionBasalSistolica,
       "presion_basal_diastolica": perfil.presionBasalDiastolica,
     };
 
-    final response = await http.post(
-  url,
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: jsonEncode(payload),
-);
+    debugPrint("JSON ENVIADO:");
+    debugPrint(jsonEncode(payload));
 
-debugPrint("JSON ENVIADO:");
-debugPrint(jsonEncode(payload));
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12));
 
-debugPrint("STATUS: ${response.statusCode}");
+      debugPrint("STATUS: ${response.statusCode}");
+      debugPrint("RESPUESTA:");
+      debugPrint(response.body);
 
-debugPrint("RESPUESTA:");
-debugPrint(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return ApiSyncResponse(
+          ok: false,
+          serverId: '',
+          message: 'Error HTTP ${response.statusCode}: ${response.body}',
+        );
+      }
 
-final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-    return ApiSyncResponse(
-      ok: data["ok"],
+      return ApiSyncResponse(
+        ok: data["ok"] == true,
+        serverId: data["server_id"]?.toString() ?? '',
+        message: data["message"]?.toString() ?? 'Perfil enviado.',
+      );
+    } catch (e) {
+      debugPrint("API REAL: error enviando perfil: $e");
 
-      serverId: data["server_id"].toString(),
-
-      message: data["message"],
-    );
+      return ApiSyncResponse(
+        ok: false,
+        serverId: '',
+        message: e.toString(),
+      );
+    }
   }
 }

@@ -18,6 +18,10 @@ class PerfilPayload(BaseModel):
     preeclampsia_previa: Optional[int] = None
     anemia_gestacional: Optional[int] = None
 
+    presion_basal_disponible: int = 1
+    embarazo_multiple: int = 0
+    antecedente_hemorragia: int = 0
+
     presion_basal_sistolica: Optional[int] = None
     presion_basal_diastolica: Optional[int] = None
 

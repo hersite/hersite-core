@@ -20,6 +20,10 @@ class Gestante(SQLModel, table=True):
     preeclampsia_previa: Optional[int] = None
     anemia_gestacional: Optional[int] = None
 
+    presion_basal_disponible: int = Field(default=1, nullable=False)
+    embarazo_multiple: int = Field(default=0, nullable=False)
+    antecedente_hemorragia: int = Field(default=0, nullable=False)
+
     presion_basal_sistolica: Optional[int] = None
     presion_basal_diastolica: Optional[int] = None
     activo: bool = Field(default=True)

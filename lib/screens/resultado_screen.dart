@@ -39,7 +39,7 @@ class ResultadoScreen extends StatelessWidget {
       colorBorde = const Color(0xFFB69500); // Amarillo fuerte
       colorTexto = const Color(0xFF8A7100); // Amarillo texto
       titulo = 'Precaución: Mantente alerta';
-      descripcion = 'Algunos de tus síntomas requieren atención.\nEs recomendable que un profesional te evalúe pronto.';
+      descripcion = 'Algunos de tus síntomas requieren atención.\nEs recomendable que un profesional te evalúe pronto. Acude lo antes posible a tu posta de salud.';
       pasos = ['1. Reposa sin esfuerzos', '2. Saca una cita médica', '3. Si empeoras, ve a la posta'];
     } else if (nivelRiesgo == 'Riesgo_Bajo') {
       colorFondo = const Color(0xFFEEFFEF); // Verde clarito

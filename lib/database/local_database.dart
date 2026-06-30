@@ -33,7 +33,7 @@ class LocalDatabase {
     return openDatabase(
       path,
       password: password,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -73,6 +73,9 @@ class LocalDatabase {
         hipertension_previa INTEGER NOT NULL,
         preeclampsia_previa INTEGER NOT NULL,
         anemia_gestacional INTEGER NOT NULL,
+        presion_basal_disponible INTEGER NOT NULL DEFAULT 1,
+        embarazo_multiple INTEGER NOT NULL DEFAULT 0,
+        antecedente_hemorragia INTEGER NOT NULL DEFAULT 0,
         presion_basal_sistolica INTEGER NOT NULL,
         presion_basal_diastolica INTEGER NOT NULL,
         created_at TEXT NOT NULL,
@@ -205,6 +208,39 @@ class LocalDatabase {
       );
     }
 
+    if (oldVersion < 5) {
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'perfil_gestante',
+        columnName: 'presion_basal_disponible',
+        definition: 'INTEGER NOT NULL DEFAULT 1',
+      );
+
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'perfil_gestante',
+        columnName: 'embarazo_multiple',
+        definition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'perfil_gestante',
+        columnName: 'antecedente_hemorragia',
+        definition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+
+      // Si en algún registro antiguo la presión basal estuviera como -1,
+      // entonces marcamos correctamente que la presión basal no está disponible.
+      await db.rawUpdate(
+        '''
+        UPDATE perfil_gestante
+        SET presion_basal_disponible = 0
+        WHERE presion_basal_sistolica = -1
+          OR presion_basal_diastolica = -1
+        ''',
+      );
+    }
 
 
   }
