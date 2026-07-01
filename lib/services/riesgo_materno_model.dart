@@ -129,9 +129,9 @@ class RiesgoMaternoModel {
     final outputNames = List<String>.from(metadata['output_names']);
     final idToClass = Map<String, dynamic>.from(metadata['id_to_class']);
 
-    if (outputNames.length < 2) {
+    if (outputNames.isEmpty) {
       throw Exception(
-        'El modelo ONNX debe tener al menos 2 salidas: etiqueta predicha y probabilidades. '
+        'El modelo ONNX no tiene salidas definidas. '
         'Salidas encontradas: $outputNames',
       );
     }
@@ -149,44 +149,110 @@ class RiesgoMaternoModel {
       [1, inputVector.length],
     );
 
-    final inputs = {
-      inputName: inputTensor,
-    };
+    dynamic outputs;
 
-    final outputs = await session.run(inputs);
+    try {
+      final inputs = {
+        inputName: inputTensor,
+      };
 
-    final labelOutputName = outputNames[0];
-    final probaOutputName = outputNames[1];
+      outputs = await session.run(inputs);
 
-    final labelRaw = await outputs[labelOutputName]!.asList();
-    final probaRaw = await outputs[probaOutputName]!.asList();
+      // Con el nuevo ONNX, debe existir una sola salida: probabilidades.
+      // Si por alguna razón hay más de una, se busca la que contenga "prob".
+      String probaOutputName;
 
-    final rawValue = labelRaw.first;
+      final salidaProbable = outputNames.where(
+        (name) => name.toLowerCase().contains('prob'),
+      );
 
-    final predictedId = rawValue is num
-        ? rawValue.toInt()
-        : int.parse(rawValue.toString());
+      if (salidaProbable.isNotEmpty) {
+        probaOutputName = salidaProbable.first;
+      } else {
+        final probaOutputIndex =
+            (metadata['output_probabilities_index'] as num?)?.toInt() ?? 0;
 
-    final predictedClass = idToClass[predictedId.toString()] as String;
+        if (probaOutputIndex < 0 || probaOutputIndex >= outputNames.length) {
+          throw Exception(
+            'Índice de probabilidades inválido: $probaOutputIndex. '
+            'Salidas encontradas: $outputNames',
+          );
+        }
 
-    /*final predictedId = (labelRaw.first as num).toInt();
-    final predictedClass = idToClass[predictedId.toString()] as String;*/
-    
-    final mensaje = _mensajePorRiesgo(predictedClass);
+        probaOutputName = outputNames[probaOutputIndex];
+      }
 
-    inputTensor.dispose();
+      final probaOrtValue = outputs[probaOutputName];
 
-    for (final output in outputs.values) {
-      output.dispose();
+      if (probaOrtValue == null) {
+        throw Exception(
+          'No se encontró la salida de probabilidades "$probaOutputName". '
+          'Salidas disponibles: ${outputs.keys.toList()}',
+        );
+      }
+
+      final probaRaw = await probaOrtValue.asList();
+      final probabilidades = _normalizarProbabilidades(probaRaw);
+
+      if (probabilidades.length != 3) {
+        throw Exception(
+          'El modelo debe devolver 3 probabilidades: bajo, medio y alto. '
+          'Probabilidades recibidas: $probabilidades',
+        );
+      }
+
+      int predictedId = 0;
+      double maxProb = probabilidades[0];
+
+      for (int i = 1; i < probabilidades.length; i++) {
+        if (probabilidades[i] > maxProb) {
+          maxProb = probabilidades[i];
+          predictedId = i;
+        }
+      }
+
+      final predictedClass = idToClass[predictedId.toString()] as String;
+      final mensaje = _mensajePorRiesgo(predictedClass);
+
+      return {
+        'predicted_id': predictedId,
+        'nivel_riesgo': predictedClass,
+        'mensaje': mensaje,
+        'probabilidades': probabilidades,
+      };
+    } finally {
+      inputTensor.dispose();
+
+      if (outputs != null) {
+        for (final output in outputs.values) {
+          output.dispose();
+        }
+      }
+    }
+  }
+
+  List<double> _normalizarProbabilidades(dynamic probaRaw) {
+    if (probaRaw is List && probaRaw.isNotEmpty) {
+      final first = probaRaw.first;
+
+      // Caso típico ONNX: [[p_bajo, p_medio, p_alto]]
+      if (first is Iterable) {
+        return first.map((e) => (e as num).toDouble()).toList();
+      }
+
+      // Caso alternativo: [p_bajo, p_medio, p_alto]
+      return probaRaw.map((e) => (e as num).toDouble()).toList();
     }
 
-    return {
-      'predicted_id': predictedId,
-      'nivel_riesgo': predictedClass,
-      'mensaje': mensaje,
-      'probabilidades': probaRaw,
-    };
+    if (probaRaw is Iterable) {
+      return probaRaw.map((e) => (e as num).toDouble()).toList();
+    }
+
+    throw Exception(
+      'Formato de probabilidades no reconocido. Valor recibido: $probaRaw',
+    );
   }
+
 
   String _mensajePorRiesgo(String riesgo) {
     switch (riesgo) {
