@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'screens/inicio_screen.dart';
-import 'services/connectivity_sync_service.dart';
 //import 'screens/prediccion_screen.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz; // 🟢 IMPORTANTE: Faltaba este import para leer la locación
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'services/recordatorio_notificaciones.dart';
 
 // Variable global para usarla en toda la app
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    RecordatorioNotificaciones.instance.plugin;
 
 // 🟢 SOLUCIÓN: Esta función DEBE ir aquí afuera, antes del main()
 @pragma('vm:entry-point')

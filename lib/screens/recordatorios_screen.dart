@@ -1,67 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'package:timezone/timezone.dart' as tz;
-import '../main.dart';
+import 'package:intl/intl.dart';
 
-// --- MODELOS DE DATOS ---
-class PastillaItem {
-  final int id;
-  final String titulo;
-  final String fecha;
-  final String hora;
-  final IconData icono;
-  bool completado;
+import '../models/recordatorio.dart';
+import '../services/recordatorios_service.dart';
 
-  PastillaItem({required this.id, required this.titulo, required this.fecha, required this.hora, required this.icono, this.completado = false});
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'titulo': titulo,
-    'fecha': fecha,
-    'hora': hora,
-    'icono': icono.codePoint, 
-    'completado': completado,
-  };
-
-  factory PastillaItem.fromJson(Map<String, dynamic> json) => PastillaItem(
-    id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.remainder(100000),
-    titulo: json['titulo'],
-    fecha: json['fecha'],
-    hora: json['hora'],
-    icono: IconData(json['icono'], fontFamily: 'MaterialIcons'),
-    completado: json['completado'],
-  );
-}
-
-class CitaItem {
-  final int id;
-  final String titulo;
-  final String fecha;
-  final String hora;
-  bool completado;
-
-  CitaItem({required this.id, required this.titulo, required this.fecha, required this.hora, this.completado = false});
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'titulo': titulo,
-    'fecha': fecha,
-    'hora': hora,
-    'completado': completado,
-  };
-
-  factory CitaItem.fromJson(Map<String, dynamic> json) => CitaItem(
-    id: json['id'] ?? DateTime.now().millisecondsSinceEpoch.remainder(100000),
-    titulo: json['titulo'],
-    fecha: json['fecha'],
-    hora: json['hora'],
-    completado: json['completado'],
-  );
-}
-
-// --- PANTALLA PRINCIPAL ---
 class RecordatoriosScreen extends StatefulWidget {
   const RecordatoriosScreen({super.key});
 
@@ -69,483 +11,857 @@ class RecordatoriosScreen extends StatefulWidget {
   State<RecordatoriosScreen> createState() => _RecordatoriosScreenState();
 }
 
-class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
-  List<PastillaItem> pastillas = [];
-  List<CitaItem> citas = [];
-  String filtroActual = 'Pendientes';
+class _RecordatoriosScreenState extends State<RecordatoriosScreen>
+    with WidgetsBindingObserver {
+  static const _verde = Color(0xFF306339);
+  late final RecordatoriosService _service;
+  List<Recordatorio> _registros = [];
+  List<RecordatorioAnterior> _anteriores = [];
+  String _filtro = 'Pendientes';
+  bool _cargando = true;
+  bool _ocupado = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _cargarDatos();
+    _service = RecordatoriosService.instance;
+    WidgetsBinding.instance.addObserver(this);
+    _cargar();
   }
 
-  Future<void> _cargarDatos() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    final String? pastillasString = prefs.getString('mis_pastillas');
-    if (pastillasString != null) {
-      final List<dynamic> jsonList = json.decode(pastillasString);
-      if (mounted) setState(() { pastillas = jsonList.map((item) => PastillaItem.fromJson(item)).toList(); });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_ocupado && !_cargando) {
+      _cargar();
     }
+  }
 
-    final String? citasString = prefs.getString('mis_citas');
-    if (citasString != null) {
-      final List<dynamic> jsonList = json.decode(citasString);
-      if (mounted) setState(() { citas = jsonList.map((item) => CitaItem.fromJson(item)).toList(); });
+  Future<void> _leerDatos({bool solicitarPermisos = false}) async {
+    final registros = await _service.restaurar(
+      solicitarPermisos: solicitarPermisos,
+    );
+    final anteriores = await _service.anterioresSinCuenta();
+    if (!mounted) return;
+    setState(() {
+      _registros = registros;
+      _anteriores = anteriores;
+      _error = null;
+    });
+  }
+
+  Future<void> _cargar() async {
+    if (_ocupado) return;
+    setState(() => _cargando = true);
+    try {
+      await _leerDatos();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'No pudimos cargar tus recordatorios. Intenta nuevamente.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
-  Future<void> _guardarDatos() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('mis_pastillas', json.encode(pastillas.map((p) => p.toJson()).toList()));
-    await prefs.setString('mis_citas', json.encode(citas.map((c) => c.toJson()).toList()));
-  }
-
-  // === PRUEBAS MANUALES (DEBUG) ===
-  Future<void> _testNotificacionInmediata() async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'test_channel', 'Canal de Pruebas', importance: Importance.max, priority: Priority.high, icon: '@mipmap/ic_launcher');
-    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
-    await flutterLocalNotificationsPlugin.show(999, 'Prueba Inmediata 🟢', 'El sistema funciona.', platformDetails);
-  }
-
-  Future<void> _testNotificacionProgramada() async {
-    final androidImplementation = flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidImplementation?.requestExactAlarmsPermission();
-    await androidImplementation?.requestNotificationsPermission();
-
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'alarm_channel', 'Canal de Alarmas', importance: Importance.max, priority: Priority.high, icon: '@mipmap/ic_launcher');
-    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
-    final tz.TZDateTime fechaProgramada = tz.TZDateTime.now(tz.local).add(const Duration(seconds: 5));
-    
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      1000, 'Alarma 5 seg ⏰', 'Timezone funcionando perfecto.', fechaProgramada, platformDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+  void _mensaje(String texto, {bool advertencia = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(texto),
+        duration: const Duration(seconds: 6),
+        backgroundColor: advertencia ? Colors.orange.shade900 : _verde,
+      ),
     );
   }
 
-  // === MAGIA DE LA ALARMA PROGRAMADA (VERSIÓN BLINDADA) ===
-  Future<void> _programarAlarmaPush(int idAlarma, String titulo, DateTime fechaHora) async {
+  String _mensajeAviso(Recordatorio registro) => switch (registro.estadoAviso) {
+    EstadoAviso.sinPermiso =>
+      'Guardado sin aviso: habilita las notificaciones y la categoría «Recordatorios de salud» en los ajustes del teléfono. Después pulsa Activar avisos.',
+    EstadoAviso.error =>
+      'Guardado, pero el aviso no pudo activarse. Pulsa Activar avisos para reintentar.',
+    EstadoAviso.aproximado =>
+      'Aviso con hora aproximada: Android puede retrasarlo. Para recibirlo a la hora elegida, permite alarmas exactas con Activar avisos.',
+    EstadoAviso.pendiente =>
+      'Guardado, pero la hora ya pasó. Reprograma el recordatorio para activar otro aviso.',
+    _ => 'Recordatorio guardado con su aviso activado.',
+  };
+
+  Future<void> _ejecutar(Future<void> Function() accion) async {
+    if (_ocupado) return;
+    setState(() => _ocupado = true);
     try {
-      final androidImplementation = flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-
-      // 1. Solicitar permisos de manera explícita (Crítico para Android 13+)
-      final bool? permisosConcedidos = await androidImplementation?.requestExactAlarmsPermission();
-      debugPrint('¿Permiso de alarmas exactas concedido?: $permisosConcedidos');
-      
-      await androidImplementation?.requestNotificationsPermission();
-
-      // 2. Cálculo preciso del Timezone
-      final tz.TZDateTime fechaProgramada = tz.TZDateTime.from(fechaHora, tz.local);
-      final tz.TZDateTime ahora = tz.TZDateTime.now(tz.local);
-
-      debugPrint('Hora actual (TZ): $ahora');
-      debugPrint('Hora programada (TZ): $fechaProgramada');
-
-      if (fechaProgramada.isBefore(ahora)) {
-        debugPrint('Error: La fecha programada está en el pasado.');
-        return;
+      await accion();
+      await _leerDatos();
+    } on ArgumentError catch (error) {
+      _mensaje(error.message.toString(), advertencia: true);
+    } catch (_) {
+      _mensaje(
+        'No se pudo completar el cambio. Revisa el recordatorio e intenta nuevamente.',
+        advertencia: true,
+      );
+      try {
+        await _leerDatos();
+      } catch (_) {
+        if (mounted) {
+          setState(() => _error = 'No pudimos actualizar los recordatorios.');
+        }
       }
-
-      // 3. Configuración extrema del canal
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'recordatorios_urgentes_v1', 
-        'Recordatorios Urgentes',
-        channelDescription: 'Alarmas críticas de salud',
-        importance: Importance.max,
-        priority: Priority.max, 
-        icon: '@mipmap/ic_launcher',
-        fullScreenIntent: true, 
-        enableVibration: true,
-        playSound: true,
-        visibility: NotificationVisibility.public,
-      );
-
-      const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
-
-      // 4. Programación
-      await flutterLocalNotificationsPlugin.zonedSchedule(
-        idAlarma,
-        '¡Recordatorio de Salud! 💊',
-        'Es hora de: $titulo',
-        fechaProgramada,
-        platformDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, 
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      );
-
-      debugPrint('✅ Alarma programada con éxito para: $fechaProgramada');
-
-    } catch (e) {
-      debugPrint('❌ Error catastrófico al programar la alarma: $e');
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
     }
   }
 
-  Future<void> _cancelarAlarmaPush(int idAlarma) async {
-    await flutterLocalNotificationsPlugin.cancel(idAlarma);
+  Future<_DatosRecordatorio?> _formulario({
+    required TipoRecordatorio tipo,
+    Recordatorio? registro,
+  }) => showModalBottomSheet<_DatosRecordatorio>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => _FormularioRecordatorio(
+      tipo: tipo,
+      registro: registro,
+      reloj: _service.reloj,
+    ),
+  );
+
+  Future<void> _crear(TipoRecordatorio tipo) async {
+    final datos = await _formulario(tipo: tipo);
+    if (datos == null || !mounted) return;
+    await _ejecutar(() async {
+      final registro = await _service.crear(
+        tipo: tipo,
+        titulo: datos.titulo,
+        fechaHora: datos.fechaHora,
+        repeticion: datos.repeticion,
+      );
+      _mensaje(
+        _mensajeAviso(registro),
+        advertencia: registro.estadoAviso != EstadoAviso.exacto,
+      );
+    });
+  }
+
+  Future<bool> _confirmar(String titulo, String texto, String aceptar) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(titulo),
+          content: Text(texto),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(aceptar),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _cambiarEstado(Recordatorio registro) async {
+    DateTime? nuevaFecha;
+    if (registro.completado) {
+      if (!registro.esDiario && !registro.fechaHora.isAfter(_service.reloj())) {
+        final datos = await _formulario(
+          tipo: registro.tipo,
+          registro: registro,
+        );
+        if (datos == null || !mounted) return;
+        nuevaFecha = datos.fechaHora;
+      } else if (!await _confirmar(
+        'Volver a pendiente',
+        '¿Quieres volver a activar el aviso de ${registro.titulo}?',
+        'Activar',
+      )) {
+        return;
+      }
+    } else {
+      final texto = registro.esDiario
+          ? 'Se detendrán todos los avisos diarios de ${registro.titulo}. Puedes reactivarlos desde Completados.'
+          : registro.tipo == TipoRecordatorio.pastilla
+          ? '¿Ya te tomaste ${registro.titulo}?'
+          : '¿Quieres marcar ${registro.titulo} como completada?';
+      if (!await _confirmar(
+        registro.esDiario ? 'Finalizar repetición diaria' : 'Confirmar',
+        texto,
+        registro.esDiario ? 'Finalizar' : 'Marcar completado',
+      )) {
+        return;
+      }
+    }
+    if (!mounted) return;
+    await _ejecutar(() async {
+      final actualizado = await _service.cambiarEstado(
+        registro.id,
+        completado: !registro.completado,
+        nuevaFecha: nuevaFecha,
+      );
+      _mensaje(
+        actualizado.completado
+            ? 'Recordatorio completado. Su aviso está cancelado.'
+            : _mensajeAviso(actualizado),
+        advertencia:
+            !actualizado.completado &&
+            actualizado.estadoAviso != EstadoAviso.exacto,
+      );
+    });
+  }
+
+  Future<void> _reprogramar(Recordatorio registro) async {
+    final datos = await _formulario(tipo: registro.tipo, registro: registro);
+    if (datos == null || !mounted) return;
+    await _ejecutar(() async {
+      final actualizado = await _service.cambiarEstado(
+        registro.id,
+        completado: false,
+        nuevaFecha: datos.fechaHora,
+      );
+      _mensaje(
+        _mensajeAviso(actualizado),
+        advertencia: actualizado.estadoAviso != EstadoAviso.exacto,
+      );
+    });
+  }
+
+  Future<void> _activarAvisos() => _ejecutar(() async {
+    final registros = await _service.restaurar(solicitarPermisos: true);
+    final fallaron = registros.any(
+      (r) =>
+          !r.completado &&
+          !r.estaVencido(_service.reloj()) &&
+          r.requiereAtencion,
+    );
+    final aproximados = registros.any(
+      (r) => !r.completado && r.estadoAviso == EstadoAviso.aproximado,
+    );
+    _mensaje(
+      fallaron
+          ? 'Hay avisos sin activar. Revisa los permisos de notificaciones del teléfono.'
+          : aproximados
+          ? 'Avisos activados con hora aproximada: falta el permiso de alarmas exactas.'
+          : 'Avisos revisados y activados para tus recordatorios futuros.',
+      advertencia: fallaron || aproximados,
+    );
+  });
+
+  Future<void> _recuperarAnteriores() async {
+    final claves = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _ImportarAnteriores(anteriores: _anteriores),
+    );
+    if (claves == null || claves.isEmpty || !mounted) return;
+    await _ejecutar(() async {
+      await _service.importarAnteriores(claves);
+      _mensaje(
+        'Recordatorios recuperados para tu cuenta. Los vencidos necesitan una nueva fecha.',
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    List<PastillaItem> pastillasFiltradas = pastillas.where((p) {
-      if (filtroActual == 'Pendientes') return !p.completado;
-      if (filtroActual == 'Completados') return p.completado;
-      return true; 
-    }).toList();
-    
-    List<CitaItem> citasFiltradas = citas.where((c) {
-      if (filtroActual == 'Pendientes') return !c.completado;
-      if (filtroActual == 'Completados') return c.completado;
-      return true;
-    }).toList();
-
+    final ahora = _service.reloj();
+    final visibles = _registros
+        .where(
+          (r) =>
+              _filtro == 'Todos' ||
+              (_filtro == 'Completados' ? r.completado : !r.completado),
+        )
+        .toList();
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFFFB), 
+      backgroundColor: const Color(0xFFFBFFFB),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFFBFFFB),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF306339)),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Column(
-        children: [
-          _buildHeader(context),
-          _buildFiltros(),
-          // 🟢 La zona expandida es SOLO para las listas que hacen scroll
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionTitle('MIS PASTILLAS'),
-                  const SizedBox(height: 15),
-                  if (pastillasFiltradas.isEmpty) _buildEmptyState('No hay pastillas en esta vista.')
-                  else ...pastillasFiltradas.map((pastilla) => _buildPillCard(pastilla)),
-                  
-                  const SizedBox(height: 35),
-                  _buildSectionTitle('MIS CITAS MÉDICAS'),
-                  const SizedBox(height: 15),
-                  if (citasFiltradas.isEmpty) _buildEmptyState('No hay citas en esta vista.')
-                  else ...citasFiltradas.map((cita) => _buildAppointmentCard(cita)),
-                  
-                  // Agregamos un poco de espacio al final de la lista
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-          // 🟢 Los botones ahora están FUERA del scroll, pegados abajo
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFBFFFB),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05), 
-                  blurRadius: 10, 
-                  offset: const Offset(0, -5)
-                )
-              ]
-            ),
-            child: _buildActionButtons(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFiltros() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      color: Colors.transparent,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: ['Pendientes', 'Completados', 'Todos'].map((filtro) {
-          bool activo = filtroActual == filtro;
-          return GestureDetector(
-            onTap: () => setState(() => filtroActual = filtro),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-              decoration: BoxDecoration(color: activo ? const Color(0xFF4C924F) : Colors.grey.shade200, borderRadius: BorderRadius.circular(20)),
-              child: Text(filtro, style: TextStyle(color: activo ? Colors.white : Colors.grey.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
-            ),
-           );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(String mensaje) {
-    return Container(
-      width: double.infinity, padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid)),
-      child: Column(
-        children: [
-          Icon(Icons.inbox, size: 40, color: Colors.grey.shade400),
-          const SizedBox(height: 10),
-          Text(mensaje, style: TextStyle(color: Colors.grey.shade500)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF7A8C7A), letterSpacing: 1.1));
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF306339), 
-        borderRadius: BorderRadius.circular(15)
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Recordatorios', 
-                style: TextStyle(
-                  color: Colors.white, 
-                  fontSize: 24, 
-                  fontWeight: FontWeight.bold, 
-                  fontFamily: 'Poltawski Nowy'
-                )
-              ),
-              SizedBox(height: 5),
-              Text(
-                'Tus pastillas y citas', 
-                style: TextStyle(
-                  color: Color(0xFFEEFFEF), 
-                  fontSize: 15, 
-                  fontFamily: 'Poltawski Nowy'
-                )
-              ),
-            ],
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.bug_report, color: Colors.white),
-            onSelected: (value) {
-              if (value == 'inmediata') _testNotificacionInmediata();
-              if (value == 'programada') _testNotificacionProgramada();
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'inmediata', child: Text('Probar Notif. Inmediata')),
-              const PopupMenuItem(value: 'programada', child: Text('Probar Notif. en 5 seg')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPillCard(PastillaItem pastilla) {
-    return Card(
-      elevation: 0, margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: pastilla.completado ? const Color(0xFF4C924F) : Colors.grey.shade200)),
-      color: pastilla.completado ? const Color(0xFFEEFFEF) : Colors.white,
-      child: ListTile(
-        onTap: () => _marcarComoTomada(pastilla),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: pastilla.completado ? const Color(0xFF4C924F).withOpacity(0.2) : const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(8)),
-          child: Icon(pastilla.icono, color: const Color(0xFF4C924F)),
-        ),
-        title: Text(pastilla.titulo, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, decoration: pastilla.completado ? TextDecoration.lineThrough : null)),
-        subtitle: Text('${pastilla.fecha} - ${pastilla.hora}', style: TextStyle(color: pastilla.completado ? const Color(0xFF4C924F) : Colors.grey.shade600, fontSize: 12)),
-        trailing: pastilla.completado ? const Icon(Icons.check_circle, color: Color(0xFF4C924F)) : Icon(Icons.radio_button_unchecked, color: Colors.grey.shade400),
-      ),
-    );
-  }
-
-  Widget _buildAppointmentCard(CitaItem cita) {
-    return Card(
-      elevation: 1, margin: const EdgeInsets.only(bottom: 12), shadowColor: Colors.black12,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12), 
-        side: BorderSide(color: cita.completado ? const Color(0xFF4C924F) : Colors.transparent)
-      ),
-      color: cita.completado ? const Color(0xFFEEFFEF) : Colors.white,
-      child: ListTile(
-        onTap: () {
-          setState(() { cita.completado = !cita.completado; });
-          if (cita.completado) { _cancelarAlarmaPush(cita.id); }
-          _guardarDatos();
-        },
-        leading: const Icon(Icons.calendar_month, size: 35, color: Color(0xFF4C924F)),
-        title: Text(cita.titulo, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, decoration: cita.completado ? TextDecoration.lineThrough : null)),
-        subtitle: Text('${cita.fecha} - ${cita.hora}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-        trailing: cita.completado ? const Icon(Icons.check_circle, color: Color(0xFF4C924F)) : Icon(Icons.radio_button_unchecked, color: Colors.grey.shade400),
-      ),
-    );
-  }
-
-  void _marcarComoTomada(PastillaItem pastilla) {
-    if (pastilla.completado) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text('Deshacer', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Text('¿Deseas volver a marcar "${pastilla.titulo}" como pendiente?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4C924F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              onPressed: () {
-                setState(() { pastilla.completado = false; });
-                _guardarDatos(); 
-                Navigator.pop(context);
-              }, 
-              child: const Text('Sí, pendiente', style: TextStyle(color: Colors.white))
-            ),
-          ],
-        ),
-      );
-      return; 
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text('Confirmar', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('¿Ya te tomaste: ${pastilla.titulo}?'),
+        title: const Text('Recordatorios'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Aún no', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4C924F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            onPressed: () {
-              setState(() { pastilla.completado = true; });
-              _cancelarAlarmaPush(pastilla.id); 
-              _guardarDatos(); 
-              Navigator.pop(context);
-            }, 
-            child: const Text('Sí, ya la tomé', style: TextStyle(color: Colors.white))
+          IconButton(
+            tooltip: 'Activar avisos',
+            onPressed: _ocupado || _cargando ? null : _activarAvisos,
+            icon: const Icon(Icons.notifications_active_outlined),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildActionButtons(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => _mostrarFormulario(context, 'Pastilla'),
-            icon: const Icon(Icons.add, size: 18), label: const Text('Pastilla'),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4C924F), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => _mostrarFormulario(context, 'Cita'),
-            icon: const Icon(Icons.calendar_today, size: 18), label: const Text('Cita'),
-            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: const BorderSide(color: Color(0xFF4C924F)), foregroundColor: const Color(0xFF4C924F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _mostrarFormulario(BuildContext context, String tipo) {
-    final TextEditingController nombreCtrl = TextEditingController();
-    final TextEditingController fechaCtrl = TextEditingController();
-    final TextEditingController horaCtrl = TextEditingController();
-    
-    DateTime? fechaSeleccionada;
-    TimeOfDay? horaSeleccionada;
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text("Agregar $tipo", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            TextField(controller: nombreCtrl, decoration: InputDecoration(labelText: 'Nombre', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)))),
-            const SizedBox(height: 10),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: fechaCtrl, readOnly: true,
-                    onTap: () async {
-                      fechaSeleccionada = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
-                      if (fechaSeleccionada != null && context.mounted) {
-                        fechaCtrl.text = "${fechaSeleccionada!.day.toString().padLeft(2, '0')}/${fechaSeleccionada!.month.toString().padLeft(2, '0')}/${fechaSeleccionada!.year}";
-                      }
-                    },
-                    decoration: InputDecoration(labelText: 'Fecha', suffixIcon: const Icon(Icons.calendar_month, color: Color(0xFF4C924F)), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)))
-                  ),
+      body: _cargando
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _cargar,
+                      child: const Text('Reintentar'),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
+              ),
+            )
+          : Column(
+              children: [
+                if (_ocupado) const LinearProgressIndicator(),
                 Expanded(
-                  child: TextField(
-                    controller: horaCtrl, readOnly: true,
-                    onTap: () async {
-                      horaSeleccionada = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                      if (horaSeleccionada != null && context.mounted) {
-                        horaCtrl.text = horaSeleccionada!.format(context);
-                      }
-                    },
-                    decoration: InputDecoration(labelText: 'Hora', suffixIcon: const Icon(Icons.access_time, color: Color(0xFF4C924F)), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)))
+                  child: RefreshIndicator(
+                    onRefresh: _cargar,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        const Text(
+                          'Tus pastillas y citas',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: _verde,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Guardados en este teléfono para tu cuenta. Funcionan sin internet.',
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          children: ['Pendientes', 'Completados', 'Todos']
+                              .map(
+                                (filtro) => ChoiceChip(
+                                  label: Text(filtro),
+                                  selected: _filtro == filtro,
+                                  onSelected: (_) =>
+                                      setState(() => _filtro = filtro),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        if (_anteriores.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Hay recordatorios de una versión anterior sin cuenta asociada.',
+                                  ),
+                                  TextButton(
+                                    onPressed: _ocupado
+                                        ? null
+                                        : _recuperarAnteriores,
+                                    child: const Text(
+                                      'Revisar y recuperar los míos',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (_registros.any(
+                          (r) =>
+                              !r.completado &&
+                              !r.estaVencido(ahora) &&
+                              r.requiereAtencion,
+                        ))
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              'Hay recordatorios sin aviso. Pulsa la campana «Activar avisos» para revisar los permisos.',
+                              style: TextStyle(color: Colors.orange.shade900),
+                            ),
+                          ),
+                        for (final tipo in TipoRecordatorio.values) ...[
+                          const SizedBox(height: 24),
+                          Text(
+                            tipo == TipoRecordatorio.pastilla
+                                ? 'MIS PASTILLAS'
+                                : 'MIS CITAS MÉDICAS',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _verde,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (!visibles.any((r) => r.tipo == tipo))
+                            const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text(
+                                'No hay recordatorios en esta vista.',
+                              ),
+                            ),
+                          ...visibles
+                              .where((r) => r.tipo == tipo)
+                              .map((r) => _tarjeta(r, ahora)),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (nombreCtrl.text.isNotEmpty && fechaSeleccionada != null && horaSeleccionada != null) {
-                    final int idUnico = DateTime.now().millisecondsSinceEpoch.remainder(100000);
-                    DateTime fechaHoraFinal = DateTime(
-                      fechaSeleccionada!.year, fechaSeleccionada!.month, fechaSeleccionada!.day,
-                      horaSeleccionada!.hour, horaSeleccionada!.minute,
-                    );
-
-                    setState(() {
-                      if (tipo == 'Pastilla') {
-                        pastillas.add(PastillaItem(id: idUnico, titulo: nombreCtrl.text, fecha: fechaCtrl.text, hora: horaCtrl.text, icono: Icons.medication));
-                      } else {
-                        citas.add(CitaItem(id: idUnico, titulo: nombreCtrl.text, fecha: fechaCtrl.text, hora: horaCtrl.text));
-                      }
-                    });
-                    
-                    _programarAlarmaPush(idUnico, nombreCtrl.text, fechaHoraFinal);
-                    _guardarDatos(); 
-                    Navigator.pop(context);
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4C924F), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: const Text('Guardar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _ocupado || _cargando || _error != null
+                      ? null
+                      : () => _crear(TipoRecordatorio.pastilla),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Pastilla'),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _ocupado || _cargando || _error != null
+                      ? null
+                      : () => _crear(TipoRecordatorio.cita),
+                  icon: const Icon(Icons.calendar_month),
+                  label: const Text('Cita'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _tarjeta(Recordatorio registro, DateTime ahora) {
+    final vencido = registro.estaVencido(ahora);
+    final estado = registro.completado
+        ? 'Completado · aviso cancelado'
+        : vencido
+        ? 'Vencido · elige una nueva fecha para recibir otro aviso'
+        : switch (registro.estadoAviso) {
+            EstadoAviso.exacto => 'Aviso activado',
+            EstadoAviso.aproximado => 'Aviso con hora aproximada',
+            EstadoAviso.sinPermiso =>
+              'Sin aviso: falta permiso de notificaciones',
+            EstadoAviso.error => 'No se pudo activar el aviso',
+            EstadoAviso.pendiente => 'Aviso pendiente de activación',
+          };
+    return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(12),
+        isThreeLine: true,
+        onTap: _ocupado ? null : () => _cambiarEstado(registro),
+        leading: Icon(
+          registro.tipo == TipoRecordatorio.pastilla
+              ? Icons.medication
+              : Icons.calendar_month,
+          color: _verde,
+        ),
+        title: Text(
+          registro.titulo,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            decoration: registro.completado ? TextDecoration.lineThrough : null,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              registro.esDiario
+                  ? 'Todos los días a las ${DateFormat('HH:mm').format(registro.fechaHora)}'
+                  : registro.fechaTexto(ahora),
+            ),
+            Text(
+              estado,
+              style: TextStyle(
+                color: vencido || registro.requiereAtencion
+                    ? Colors.orange.shade900
+                    : null,
+              ),
+            ),
+            if (registro.esDiario && !registro.completado)
+              const Text('Toca para finalizar la repetición.'),
+          ],
+        ),
+        trailing: registro.completado
+            ? const Icon(Icons.check_circle, color: _verde)
+            : IconButton(
+                tooltip: registro.esDiario ? 'Cambiar hora' : 'Reprogramar',
+                onPressed: _ocupado ? null : () => _reprogramar(registro),
+                icon: const Icon(Icons.edit_calendar_outlined),
+              ),
+      ),
+    );
+  }
+}
+
+class _DatosRecordatorio {
+  const _DatosRecordatorio(this.titulo, this.fechaHora, this.repeticion);
+  final String titulo;
+  final DateTime fechaHora;
+  final RepeticionRecordatorio repeticion;
+}
+
+class _FormularioRecordatorio extends StatefulWidget {
+  const _FormularioRecordatorio({
+    required this.tipo,
+    required this.reloj,
+    this.registro,
+  });
+  final TipoRecordatorio tipo;
+  final Recordatorio? registro;
+  final DateTime Function() reloj;
+
+  @override
+  State<_FormularioRecordatorio> createState() =>
+      _FormularioRecordatorioState();
+}
+
+class _FormularioRecordatorioState extends State<_FormularioRecordatorio> {
+  final _form = GlobalKey<FormState>();
+  final _validacion = GlobalKey();
+  late final TextEditingController _nombre;
+  late RepeticionRecordatorio _repeticion;
+  DateTime? _fecha;
+  TimeOfDay? _hora;
+  String? _errorFecha;
+  bool _intentoGuardar = false;
+
+  List<String> get _camposFaltantes => [
+    if (_nombre.text.trim().isEmpty) 'nombre',
+    if (_repeticion == RepeticionRecordatorio.unaVez && _fecha == null) 'fecha',
+    if (_hora == null) 'hora',
+  ];
+
+  void _actualizarValidacion() {
+    if (_intentoGuardar) {
+      setState(() => _errorFecha = null);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final registro = widget.registro;
+    _nombre = TextEditingController(text: registro?.titulo);
+    _repeticion = registro?.repeticion ?? RepeticionRecordatorio.unaVez;
+    if (registro != null) {
+      _hora = TimeOfDay.fromDateTime(registro.fechaHora);
+      _fecha = registro.fechaHora.isAfter(widget.reloj())
+          ? registro.fechaHora
+          : null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    super.dispose();
+  }
+
+  Future<void> _elegirFecha() async {
+    final ahora = widget.reloj();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final elegida = await showDatePicker(
+      context: context,
+      initialDate: _fecha != null && !_fecha!.isBefore(hoy) ? _fecha : hoy,
+      firstDate: hoy,
+      lastDate: DateTime(ahora.year + 10, 12, 31),
+    );
+    if (elegida != null && mounted) {
+      setState(() {
+        _fecha = elegida;
+        _errorFecha = null;
+      });
+    }
+  }
+
+  Future<void> _elegirHora() async {
+    final elegida = await showTimePicker(
+      context: context,
+      initialTime: _hora ?? TimeOfDay.fromDateTime(widget.reloj()),
+    );
+    if (elegida != null && mounted) {
+      setState(() {
+        _hora = elegida;
+        _errorFecha = null;
+      });
+    }
+  }
+
+  void _guardar() {
+    setState(() => _intentoGuardar = true);
+    final nombreValido = _form.currentState!.validate();
+    if (_camposFaltantes.isNotEmpty || !nombreValido) {
+      setState(() => _errorFecha = null);
+      FocusScope.of(context).unfocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final aviso = _validacion.currentContext;
+        if (mounted && aviso != null) {
+          Scrollable.ensureVisible(
+            aviso,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      });
+      return;
+    }
+    final ahora = widget.reloj();
+    final dia = _fecha ?? ahora;
+    var fecha = DateTime(
+      dia.year,
+      dia.month,
+      dia.day,
+      _hora!.hour,
+      _hora!.minute,
+    );
+    if (_repeticion == RepeticionRecordatorio.diaria) {
+      fecha = Recordatorio.siguienteHoraDiaria(fecha, ahora);
+    }
+    if (!fecha.isAfter(ahora)) {
+      setState(
+        () => _errorFecha =
+            'La fecha y hora deben ser posteriores a la hora actual.',
+      );
+      return;
+    }
+    Navigator.pop(
+      context,
+      _DatosRecordatorio(_nombre.text.trim(), fecha, _repeticion),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: EdgeInsets.fromLTRB(
+      20,
+      24,
+      20,
+      MediaQuery.viewInsetsOf(context).bottom + 24,
+    ),
+    child: Form(
+      key: _form,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.registro != null
+                ? 'Reprogramar recordatorio'
+                : widget.tipo == TipoRecordatorio.pastilla
+                ? 'Agregar pastilla'
+                : 'Agregar cita',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 20),
+          if (_intentoGuardar && _camposFaltantes.isNotEmpty)
+            Semantics(
+              key: _validacion,
+              liveRegion: true,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Falta completar: ${_camposFaltantes.join(', ')}. Completa estos campos para continuar.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ),
+          TextFormField(
+            controller: _nombre,
+            readOnly: widget.registro != null,
+            maxLength: 100,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(labelText: 'Nombre'),
+            autovalidateMode: _intentoGuardar
+                ? AutovalidateMode.onUserInteraction
+                : AutovalidateMode.disabled,
+            onChanged: (_) => _actualizarValidacion(),
+            validator: (texto) => texto == null || texto.trim().isEmpty
+                ? 'Escribe un nombre.'
+                : null,
+          ),
+          if (widget.tipo == TipoRecordatorio.pastilla) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<RepeticionRecordatorio>(
+              initialValue: _repeticion,
+              decoration: const InputDecoration(labelText: 'Repetición'),
+              items: const [
+                DropdownMenuItem(
+                  value: RepeticionRecordatorio.unaVez,
+                  child: Text('Una sola vez'),
+                ),
+                DropdownMenuItem(
+                  value: RepeticionRecordatorio.diaria,
+                  child: Text('Todos los días'),
+                ),
+              ],
+              onChanged: widget.registro != null
+                  ? null
+                  : (valor) => setState(() {
+                      _repeticion = valor!;
+                      _errorFecha = null;
+                    }),
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (_repeticion == RepeticionRecordatorio.unaVez)
+            ListTile(
+              leading: const Icon(Icons.calendar_month),
+              title: const Text('Fecha'),
+              subtitle: Text(
+                _fecha == null
+                    ? 'Seleccionar fecha'
+                    : DateFormat('dd/MM/yyyy').format(_fecha!),
+                style: _intentoGuardar && _fecha == null
+                    ? TextStyle(color: Theme.of(context).colorScheme.error)
+                    : null,
+              ),
+              trailing: _intentoGuardar && _fecha == null
+                  ? Icon(
+                      Icons.error_outline,
+                      color: Theme.of(context).colorScheme.error,
+                    )
+                  : null,
+              onTap: _elegirFecha,
+            ),
+          ListTile(
+            leading: const Icon(Icons.access_time),
+            title: const Text('Hora (Lima)'),
+            subtitle: Text(
+              _hora == null ? 'Seleccionar hora' : _hora!.format(context),
+              style: _intentoGuardar && _hora == null
+                  ? TextStyle(color: Theme.of(context).colorScheme.error)
+                  : null,
+            ),
+            trailing: _intentoGuardar && _hora == null
+                ? Icon(
+                    Icons.error_outline,
+                    color: Theme.of(context).colorScheme.error,
+                  )
+                : null,
+            onTap: _elegirHora,
+          ),
+          if (_repeticion == RepeticionRecordatorio.diaria)
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: Text(
+                'El primer aviso será la próxima vez que llegue esta hora. Se repetirá cada día hasta que finalices el recordatorio.',
+              ),
+            ),
+          if (_errorFecha != null)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                _errorFecha!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _guardar,
+              child: const Text('Guardar'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ImportarAnteriores extends StatefulWidget {
+  const _ImportarAnteriores({required this.anteriores});
+  final List<RecordatorioAnterior> anteriores;
+  @override
+  State<_ImportarAnteriores> createState() => _ImportarAnterioresState();
+}
+
+class _ImportarAnterioresState extends State<_ImportarAnteriores> {
+  final _seleccionados = <String>{};
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Recuperar mis recordatorios'),
+    content: SizedBox(
+      width: 400,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Selecciona solo los que te pertenecen. Se guardarán en tu cuenta; los originales se conservarán.',
+          ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: widget.anteriores.map((anterior) {
+                String? fecha;
+                try {
+                  fecha = DateFormat(
+                    'dd/MM/yyyy HH:mm',
+                  ).format(anterior.fechaHora);
+                } catch (_) {
+                  /* El original no se elimina si su fecha no se reconoce. */
+                }
+                return CheckboxListTile(
+                  title: Text(anterior.titulo),
+                  subtitle: Text(
+                    fecha ??
+                        'Fecha u hora no reconocida. Conserva el original y crea un nuevo recordatorio.',
+                  ),
+                  value: _seleccionados.contains(anterior.clave),
+                  onChanged: fecha == null
+                      ? null
+                      : (valor) => setState(() {
+                          if (valor == true) {
+                            _seleccionados.add(anterior.clave);
+                          } else {
+                            _seleccionados.remove(anterior.clave);
+                          }
+                        }),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancelar'),
+      ),
+      FilledButton(
+        onPressed: _seleccionados.isEmpty
+            ? null
+            : () => Navigator.pop(context, _seleccionados),
+        child: const Text('Recuperar'),
+      ),
+    ],
+  );
 }

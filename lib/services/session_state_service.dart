@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'recordatorio_notificaciones.dart';
 
 class SessionStateService {
   SessionStateService._internal();
@@ -16,6 +17,8 @@ class SessionStateService {
   }
 
   Future<void> markSessionClosed() async {
+    // Cancela solo recordatorios; conserva los datos para el próximo ingreso.
+    await RecordatorioNotificaciones.instance.cancelarTodos();
     await _secureStorage.write(
       key: _sessionClosedKey,
       value: 'true',
@@ -32,6 +35,9 @@ class SessionStateService {
   }
 
   Future<void> setActiveProfileId(int profileId) async {
+    if (await getActiveProfileId() != profileId) {
+      await RecordatorioNotificaciones.instance.cancelarTodos();
+    }
     await _secureStorage.write(
       key: _activeProfileIdKey,
       value: profileId.toString(),

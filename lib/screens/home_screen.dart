@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
 import '../models/evaluacion_riesgo.dart';
+import '../models/recordatorio.dart';
+import '../services/recordatorio_notificaciones.dart';
+import '../services/recordatorios_service.dart';
 import 'sintomas_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
@@ -9,7 +12,6 @@ import 'historial_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'recordatorios_screen.dart';
-import 'dart:convert';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../main.dart'; 
 import 'package:connectivity_plus/connectivity_plus.dart'; 
@@ -25,7 +27,7 @@ class Home extends StatefulWidget {
   State<Home> createState() => _HomeState();
 }
 
-class _HomeState extends State<Home> {
+class _HomeState extends State<Home> with WidgetsBindingObserver {
   PerfilGestante? _perfil;
   EvaluacionRiesgo? _ultimaEvaluacion;
   bool _cargando = true;
@@ -33,6 +35,7 @@ class _HomeState extends State<Home> {
   DateTime? _fechaAncla;
   int _notificacionesPendientes = 0;
   List<String> _mensajesNotificacion = [];
+  bool _actualizandoRecordatorios = false;
   
   // 🔴 Se eliminó la variable local _notificacionMostradaEnSesion
   
@@ -42,6 +45,7 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _cargarDatosInicio();
     
     // 1. Revisar estado inicial de red
@@ -68,8 +72,16 @@ class _HomeState extends State<Home> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _conexionSubscription.cancel(); 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _perfil != null) {
+      _cargarNotificaciones();
+    }
   }
 
   Future<void> _enviarNotificacionBienvenida() async {
@@ -652,37 +664,27 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _cargarNotificaciones() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? pastillasString = prefs.getString('mis_pastillas');
-    final String? citasString = prefs.getString('mis_citas');
-    
-    int pendientes = 0;
-    List<String> mensajes = [];
-    if (pastillasString != null && pastillasString.isNotEmpty) {
-      final List<dynamic> jsonPastillas = List.from(json.decode(pastillasString));
-      for (var item in jsonPastillas) {
-        if (item['completado'] == false) {
-          pendientes++;
-          mensajes.add("💊 Pastilla: ${item['titulo']} a las ${item['hora']}");
-        }
-      }
-    }
-
-    if (citasString != null && citasString.isNotEmpty) {
-      final List<dynamic> jsonCitas = List.from(json.decode(citasString));
-      for (var item in jsonCitas) {
-        if (item['completado'] == false) {
-          pendientes++;
-          mensajes.add("📅 Cita: ${item['titulo']} el ${item['fecha']} a las ${item['hora']}");
-        }
-      }
-    }
-
-    if (mounted) {
+    if (_actualizandoRecordatorios) return;
+    _actualizandoRecordatorios = true;
+    try {
+      final registros = await RecordatoriosService.instance.restaurar();
+      final ahora = RecordatorioNotificaciones.ahora();
+      final pendientes = registros.where((r) => !r.completado).toList();
+      final mensajes = pendientes.map((r) {
+        final tipo = r.tipo == TipoRecordatorio.cita ? '📅 Cita' : '💊 Pastilla';
+        final estado = r.estaVencido(ahora) ? ' · Vencido'
+            : r.requiereAtencion ? ' · Sin aviso activado' : '';
+        return '$tipo: ${r.titulo} · ${r.fechaTexto(ahora)}$estado';
+      }).toList();
+      if (!mounted) return;
       setState(() {
-        _notificacionesPendientes = pendientes;
+        _notificacionesPendientes = pendientes.length;
         _mensajesNotificacion = mensajes;
       });
+    } catch (error) {
+      debugPrint('No se pudieron actualizar los recordatorios: $error');
+    } finally {
+      _actualizandoRecordatorios = false;
     }
   }
   

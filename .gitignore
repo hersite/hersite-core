@@ -7,6 +7,29 @@
 .buildlog/
 .history
 
+# Local editors, dependency caches, and generated artifacts
+.idea/
+*.iml
+node_modules/
+.vite/
+__pycache__/
+*.apk
+*.aab
+/outputs/
+.DS_Store
+Thumbs.db
+
+# Local configuration and databases
+.env
+.env.*
+!.env.example
+!.env.sample
+backend/*.db
+backend/*.db-*
+
+# Flutter application dependencies must stay reproducible
+!/pubspec.lock
+
 
 
 # Flutter repo-specific

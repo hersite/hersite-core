@@ -137,8 +137,6 @@ Future.delayed(const Duration(seconds: 2), () {
 
     // Marca la sesión como cerrada.
     await SessionStateService.instance.markSessionClosed();
-    // Marca la sesión como cerrada.
-    await SessionStateService.instance.markSessionClosed();
 
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
