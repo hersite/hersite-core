@@ -1,10 +1,16 @@
 import os
 from collections import Counter
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, date, timedelta, timezone
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import IntegrityError
+from app.auth_routes import router as auth_router, mobile_patient
+from app.security import current_user, require_admin, require_patient, visible_ids
+from app.models import PersonalSalud
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
@@ -12,18 +18,13 @@ from app.database import create_db_and_tables, get_session
 from app.models import EvaluacionCentral, Gestante
 from app.schemas import EvaluacionPayload, EvaluacionResponse, HealthResponse, PerfilPayload
 
-from fastapi import Body
 
-from pydantic import BaseModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
     yield
 
-class LoginPayload(BaseModel):
-    dni: str
-    pin: str
 
 app = FastAPI(
     title="Riesgo Materno API",
@@ -31,6 +32,39 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+app.include_router(auth_router)
+
+
+@app.middleware("http")
+async def transport_security(request: Request, call_next):
+    local_hosts = {"localhost", "127.0.0.1", "10.0.2.2", "testserver", "::1"}
+    development = os.getenv("APP_ENV", "development") == "development"
+    if request.url.scheme != "https" and not (development and request.url.hostname in local_hosts):
+        return JSONResponse(status_code=400, content={"detail": "Esta API requiere HTTPS."})
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_payload(request, error):
+    # No devolver PIN, claves de sincronización ni el formulario clínico.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(item["loc"]), "msg": item["msg"], "type": item["type"]}
+        for item in error.errors()
+    ]})
+
+
+def _visible_query(model, user, session):
+    query = select(model)
+    allowed = visible_ids(user, session)
+    if allowed is not None:
+        column = Gestante.id if model is Gestante else EvaluacionCentral.gestante_id
+        query = query.where(column.in_(allowed))
+    return query
 
 
 app.add_middleware(
@@ -67,8 +101,8 @@ def _gestante_to_dict(gestante: Gestante | None):
         "dni": gestante.dni,
         "nombre": gestante.nombre,
         "celular": gestante.celular,
-        "edad_materna": gestante.edad_materna,
-        "semanas_gestacion": gestante.semanas_gestacion,
+        "edad_materna": _edad_actual(gestante),
+        "semanas_gestacion": _semanas_actuales(gestante),
         "numero_embarazos": gestante.numero_embarazos,
         "cesarea_previa": gestante.cesarea_previa,
         "diabetes": gestante.diabetes,
@@ -80,7 +114,25 @@ def _gestante_to_dict(gestante: Gestante | None):
         "antecedente_hemorragia": gestante.antecedente_hemorragia,
         "presion_basal_sistolica": gestante.presion_basal_sistolica,
         "presion_basal_diastolica": gestante.presion_basal_diastolica,
+        "fecha_nacimiento": gestante.fecha_nacimiento,
+        "fecha_referencia_gestacion": gestante.fecha_referencia_gestacion,
     }
+
+
+def _edad_actual(gestante):
+    if not gestante.fecha_nacimiento:
+        return gestante.edad_materna
+    born = date.fromisoformat(gestante.fecha_nacimiento)
+    today = datetime.now(timezone(timedelta(hours=-5))).date()
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+
+def _semanas_actuales(gestante):
+    if not gestante.fecha_referencia_gestacion or gestante.semanas_gestacion is None:
+        return gestante.semanas_gestacion
+    today = datetime.now(timezone(timedelta(hours=-5))).date()
+    days = max((today - date.fromisoformat(gestante.fecha_referencia_gestacion)).days, 0)
+    return gestante.semanas_gestacion + days // 7
 
 
 def _evaluacion_to_card(evaluacion: EvaluacionCentral, gestante: Gestante | None):
@@ -89,6 +141,9 @@ def _evaluacion_to_card(evaluacion: EvaluacionCentral, gestante: Gestante | None
         "server_id": evaluacion.server_id,
         "id_local": evaluacion.id_local,
         "fecha_hora": evaluacion.fecha_hora,
+        "recibido_en": evaluacion.recibido_en,
+        "probabilidades": evaluacion.probabilidades,
+        "semanas_gestacion": (evaluacion.form_data or {}).get("Semanas_Gestacion"),
         "nivel_riesgo": evaluacion.nivel_riesgo,
         "nivel_riesgo_legible": _riesgo_legible(evaluacion.nivel_riesgo),
         "mensaje": evaluacion.mensaje,
@@ -101,7 +156,11 @@ def _evaluacion_to_card(evaluacion: EvaluacionCentral, gestante: Gestante | None
 
 def _parse_fecha_iso(fecha_hora: str):
     try:
-        return datetime.fromisoformat(fecha_hora)
+        value = datetime.fromisoformat(fecha_hora.replace("Z", "+00:00"))
+        lima = timezone(timedelta(hours=-5))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=lima)
+        return value.astimezone(lima)
     except Exception:
         return None
 
@@ -199,8 +258,6 @@ def _detectar_factores_clinicos(form_data: dict):
 
     return factores
 
-    return factores
-
 @app.get("/health", response_model=HealthResponse)
 def health_check():
     return HealthResponse(
@@ -211,10 +268,11 @@ def health_check():
 @app.get("/api/dashboard/resumen")
 def dashboard_resumen(
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
     # 1. Obtenemos todas las gestantes, ordenadas por registro reciente
-    gestantes = session.exec(select(Gestante).order_by(Gestante.id.desc())).all()
-    evaluaciones = session.exec(select(EvaluacionCentral)).all()
+    gestantes = session.exec(_visible_query(Gestante, user, session).order_by(Gestante.id.desc())).all()
+    evaluaciones = session.exec(_visible_query(EvaluacionCentral, user, session)).all()
 
     # 2. Resumen de riesgos (basado en evaluaciones totales)
     total_bajo = sum(1 for e in evaluaciones if e.nivel_riesgo == "Riesgo_Bajo")
@@ -228,7 +286,7 @@ def dashboard_resumen(
         ultima_eval = session.exec(
             select(EvaluacionCentral)
             .where(EvaluacionCentral.gestante_id == g.id)
-            .order_by(EvaluacionCentral.id.desc())
+            .order_by(EvaluacionCentral.fecha_hora.desc(), EvaluacionCentral.id.desc())
             .limit(1)
         ).first()
 
@@ -251,9 +309,10 @@ def dashboard_resumen(
 @app.get("/api/tendencias/resumen")
 def tendencias_resumen(
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
-    gestantes = session.exec(select(Gestante)).all()
-    evaluaciones = session.exec(select(EvaluacionCentral)).all()
+    gestantes = session.exec(_visible_query(Gestante, user, session)).all()
+    evaluaciones = session.exec(_visible_query(EvaluacionCentral, user, session)).all()
 
     total_evaluaciones = len(evaluaciones)
 
@@ -328,22 +387,6 @@ def tendencias_resumen(
             }
         )
 
-    for factor, total in contador_factores.most_common(8):
-        porcentaje = 0
-
-        if total_evaluaciones > 0:
-            porcentaje = round((total / total_evaluaciones) * 100, 1)
-
-        factores_frecuentes.append(
-            {
-                "factor": factor,
-                "total": total,
-                "porcentaje": porcentaje,
-            }
-        )
-
-    riesgo_predominante = "Sin datos"
-
     riesgo_predominante = "Sin datos"
 
     if total_evaluaciones > 0:
@@ -364,9 +407,10 @@ def tendencias_resumen(
 @app.get("/api/sistema/estado")
 def sistema_estado(
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
 # 1. Filtramos solo a las pacientes activas
-    gestantes_activas = session.exec(select(Gestante).where(Gestante.activo == True)).all()
+    gestantes_activas = session.exec(_visible_query(Gestante, user, session).where(Gestante.activo == True)).all()
     
     total_bajo = 0
     total_medio = 0
@@ -378,7 +422,7 @@ def sistema_estado(
         ultima_eval = session.exec(
             select(EvaluacionCentral)
             .where(EvaluacionCentral.gestante_id == g.id)
-            .order_by(EvaluacionCentral.id.desc())
+            .order_by(EvaluacionCentral.fecha_hora.desc(), EvaluacionCentral.id.desc())
             .limit(1)
         ).first()
 
@@ -393,8 +437,8 @@ def sistema_estado(
 
     # 3. Obtenemos la última evaluación global para la card
     ultima_evaluacion = session.exec(
-        select(EvaluacionCentral)
-        .order_by(EvaluacionCentral.id.desc())
+        _visible_query(EvaluacionCentral, user, session)
+        .order_by(EvaluacionCentral.fecha_hora.desc(), EvaluacionCentral.id.desc())
         .limit(1)
     ).first()
 
@@ -479,113 +523,50 @@ def sistema_estado(
         ],
     }
 
+def _update_profile(gestante, payload):
+    values = payload.model_dump(mode="json")
+    # Una evaluación histórica no debe sobrescribir el perfil vigente.
+    if gestante.actualizado_en and (not values.get("actualizado_en") or values["actualizado_en"] < gestante.actualizado_en):
+        raise HTTPException(409, "Hay una versión más reciente de este perfil en el servidor. Solicita revisar los datos antes de sobrescribirlos.")
+    for key, value in values.items():
+        setattr(gestante, key, value)
+
+
 @app.post("/api/evaluaciones", response_model=EvaluacionResponse)
-def recibir_evaluacion(
-    payload: EvaluacionPayload,
-    session: Session = Depends(get_session),
-):
-    evaluacion_existente = session.exec(
-        select(EvaluacionCentral).where(
-            EvaluacionCentral.id_local == payload.id_local
-        )
-    ).first()
-
-    if evaluacion_existente is not None:
-        return EvaluacionResponse(
-            ok=True,
-            server_id=evaluacion_existente.server_id,
-            message="La evaluación ya estaba registrada en el servidor.",
-        )
-
-    gestante_id = None
-
-    if payload.perfil is not None and payload.perfil.dni:
-        gestante = session.exec(
-            select(Gestante).where(
-                Gestante.dni == payload.perfil.dni
-            )
-        ).first()
-
-        if gestante is None:
-            gestante = Gestante(
-                dni=payload.perfil.dni,
-                nombre=payload.perfil.nombre,
-                celular=payload.perfil.celular,
-                edad_materna=payload.perfil.edad_materna,
-                semanas_gestacion=payload.perfil.semanas_gestacion,
-                numero_embarazos=payload.perfil.numero_embarazos,
-                cesarea_previa=payload.perfil.cesarea_previa,
-                diabetes=payload.perfil.diabetes,
-                hipertension_previa=payload.perfil.hipertension_previa,
-                preeclampsia_previa=payload.perfil.preeclampsia_previa,
-                anemia_gestacional=payload.perfil.anemia_gestacional,
-                presion_basal_disponible=payload.perfil.presion_basal_disponible,
-                embarazo_multiple=payload.perfil.embarazo_multiple,
-                antecedente_hemorragia=payload.perfil.antecedente_hemorragia,
-                presion_basal_sistolica=payload.perfil.presion_basal_sistolica,
-                presion_basal_diastolica=payload.perfil.presion_basal_diastolica,
-            )
-
-            session.add(gestante)
-            session.commit()
-            session.refresh(gestante)
-        else:
-            gestante.nombre = payload.perfil.nombre
-            gestante.celular = payload.perfil.celular
-            gestante.edad_materna = payload.perfil.edad_materna
-            gestante.semanas_gestacion = payload.perfil.semanas_gestacion
-            gestante.numero_embarazos = payload.perfil.numero_embarazos
-            gestante.cesarea_previa = payload.perfil.cesarea_previa
-            gestante.diabetes = payload.perfil.diabetes
-            gestante.hipertension_previa = payload.perfil.hipertension_previa
-            gestante.preeclampsia_previa = payload.perfil.preeclampsia_previa
-            gestante.anemia_gestacional = payload.perfil.anemia_gestacional
-            gestante.presion_basal_disponible = payload.perfil.presion_basal_disponible
-            gestante.embarazo_multiple = payload.perfil.embarazo_multiple
-            gestante.antecedente_hemorragia = payload.perfil.antecedente_hemorragia
-            gestante.presion_basal_sistolica = payload.perfil.presion_basal_sistolica
-            gestante.presion_basal_diastolica = payload.perfil.presion_basal_diastolica
-
-            session.add(gestante)
-            session.commit()
-            session.refresh(gestante)
-
-        gestante_id = gestante.id
-
-    server_id = f"srv_{uuid4()}"
-
-    evaluacion = EvaluacionCentral(
-        server_id=server_id,
-        id_local=payload.id_local,
-        gestante_id=gestante_id,
-        perfil_id_local=payload.perfil_id_local,
-        fecha_hora=payload.fecha_hora,
-        form_data=payload.form_data,
-        sintomas_detectados=payload.sintomas_detectados,
-        nivel_riesgo=payload.nivel_riesgo,
-        mensaje=payload.mensaje,
-        probabilidades=payload.probabilidades,
-        sync_status_local=payload.sync_status_local,
-        origen=payload.origen,
-    )
-
-    session.add(evaluacion)
-    session.commit()
-    session.refresh(evaluacion)
-
-    return EvaluacionResponse(
-        ok=True,
-        server_id=server_id,
-        message="Evaluación registrada correctamente en el servidor.",
-    )
+def recibir_evaluacion(payload: EvaluacionPayload, patient: Gestante = Depends(mobile_patient),
+                       session: Session = Depends(get_session)):
+    if payload.perfil.dni != patient.dni:
+        raise HTTPException(403, "La evaluación no pertenece a esta cuenta.")
+    local_id = str(payload.id_local)
+    existing = session.exec(select(EvaluacionCentral).where(EvaluacionCentral.id_local == local_id)).first()
+    if existing:
+        if existing.gestante_id != patient.id:
+            raise HTTPException(409, "El identificador de evaluación ya está en uso.")
+        return EvaluacionResponse(ok=True, server_id=existing.server_id, message="Evaluación ya registrada.")
+    values = payload.model_dump(mode="json", exclude={"perfil"})
+    evaluation = EvaluacionCentral(**values, server_id=f"srv_{uuid4()}", gestante_id=patient.id,
+                                  recibido_en=datetime.now().astimezone().isoformat())
+    session.add(evaluation)
+    # Los cambios de perfil se sincronizan por separado; una evaluación conserva su instantánea.
+    try:
+        session.commit()
+        session.refresh(evaluation)
+    except IntegrityError:
+        session.rollback()
+        existing = session.exec(select(EvaluacionCentral).where(EvaluacionCentral.id_local == local_id)).first()
+        if existing and existing.gestante_id == patient.id:
+            return EvaluacionResponse(ok=True, server_id=existing.server_id, message="Evaluación ya registrada.")
+        raise HTTPException(409, "No se pudo registrar la evaluación sin duplicar datos.")
+    return EvaluacionResponse(ok=True, server_id=evaluation.server_id, message="Evaluación recibida.")
 
 
 @app.get("/api/evaluaciones")
 def listar_evaluaciones(
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
     evaluaciones = session.exec(
-        select(EvaluacionCentral).order_by(EvaluacionCentral.id.desc())
+        _visible_query(EvaluacionCentral, user, session).order_by(EvaluacionCentral.fecha_hora.desc(), EvaluacionCentral.id.desc())
     ).all()
 
     return evaluaciones
@@ -594,10 +575,11 @@ def listar_evaluaciones(
 def listar_ultimas_evaluaciones(
     limit: int = Query(default=20, ge=1, le=100),
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
     evaluaciones = session.exec(
-        select(EvaluacionCentral)
-        .order_by(EvaluacionCentral.id.desc())
+        _visible_query(EvaluacionCentral, user, session)
+        .order_by(EvaluacionCentral.fecha_hora.desc(), EvaluacionCentral.id.desc())
         .limit(limit)
     ).all()
 
@@ -620,8 +602,11 @@ def listar_ultimas_evaluaciones(
 def obtener_detalle_evaluacion(
     evaluacion_id: int,
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
     evaluacion = session.get(EvaluacionCentral, evaluacion_id)
+    if evaluacion is not None:
+        require_patient(user, session, evaluacion.gestante_id)
 
     if evaluacion is None:
         raise HTTPException(
@@ -645,10 +630,11 @@ def obtener_detalle_evaluacion(
 @app.get("/api/gestantes")
 def listar_gestantes(
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
 # Quitamos el filtro .where(Gestante.activo == True) para traer todas
     gestantes = session.exec(
-        select(Gestante).order_by(Gestante.id.desc())
+        _visible_query(Gestante, user, session).order_by(Gestante.id.desc())
     ).all()
     return [_gestante_to_dict(g) for g in gestantes]
 
@@ -657,7 +643,9 @@ def listar_gestantes(
 def listar_evaluaciones_por_gestante(
     gestante_id: int,
     session: Session = Depends(get_session),
+    user: PersonalSalud = Depends(current_user),
 ):
+    require_patient(user, session, gestante_id)
     gestante = session.get(Gestante, gestante_id)
 
     if gestante is None:
@@ -669,7 +657,7 @@ def listar_evaluaciones_por_gestante(
     evaluaciones = session.exec(
         select(EvaluacionCentral)
         .where(EvaluacionCentral.gestante_id == gestante_id)
-        .order_by(EvaluacionCentral.id.desc())
+        .order_by(EvaluacionCentral.fecha_hora.desc(), EvaluacionCentral.id.desc())
     ).all()
 
     return {
@@ -682,132 +670,19 @@ def listar_evaluaciones_por_gestante(
     }
 
 @app.post("/api/perfiles")
-def registrar_perfil(
-    perfil: PerfilPayload,
-    session: Session = Depends(get_session),
-):
-
-    gestante = session.exec(
-        select(Gestante).where(
-            Gestante.dni == perfil.dni
-        )
-    ).first()
-
-    if gestante is None:
-
-        gestante = Gestante(
-            dni=perfil.dni,
-            nombre=perfil.nombre,
-            celular=perfil.celular,
-            edad_materna=perfil.edad_materna,
-            semanas_gestacion=perfil.semanas_gestacion,
-            numero_embarazos=perfil.numero_embarazos,
-            cesarea_previa=perfil.cesarea_previa,
-            diabetes=perfil.diabetes,
-            hipertension_previa=perfil.hipertension_previa,
-            preeclampsia_previa=perfil.preeclampsia_previa,
-            anemia_gestacional=perfil.anemia_gestacional,
-            presion_basal_disponible=perfil.presion_basal_disponible,
-            embarazo_multiple=perfil.embarazo_multiple,
-            antecedente_hemorragia=perfil.antecedente_hemorragia,
-            presion_basal_sistolica=perfil.presion_basal_sistolica,
-            presion_basal_diastolica=perfil.presion_basal_diastolica,
-        )
-
-    else:
-
-        gestante.nombre = perfil.nombre
-        gestante.celular = perfil.celular
-        gestante.edad_materna = perfil.edad_materna
-        gestante.semanas_gestacion = perfil.semanas_gestacion
-        gestante.numero_embarazos = perfil.numero_embarazos
-        gestante.cesarea_previa = perfil.cesarea_previa
-        gestante.diabetes = perfil.diabetes
-        gestante.hipertension_previa = perfil.hipertension_previa
-        gestante.preeclampsia_previa = perfil.preeclampsia_previa
-        gestante.anemia_gestacional = perfil.anemia_gestacional
-        gestante.presion_basal_disponible = perfil.presion_basal_disponible
-        gestante.embarazo_multiple = perfil.embarazo_multiple
-        gestante.antecedente_hemorragia = perfil.antecedente_hemorragia
-        gestante.presion_basal_sistolica = perfil.presion_basal_sistolica
-        gestante.presion_basal_diastolica = perfil.presion_basal_diastolica
-
-    session.add(gestante)
+def registrar_perfil(perfil: PerfilPayload, patient: Gestante = Depends(mobile_patient),
+                     session: Session = Depends(get_session)):
+    if perfil.dni != patient.dni:
+        raise HTTPException(403, "No puedes modificar otra cuenta.")
+    _update_profile(patient, perfil)
+    session.add(patient)
     session.commit()
-    session.refresh(gestante)
+    return {"ok": True, "server_id": str(patient.id), "message": "Perfil recibido."}
 
-    return {
-        "ok": True,
-        "server_id": gestante.id,
-        "message": "Perfil registrado."
-    }
-
-
-#rol y seguridad
-from app.models import PersonalSalud
-
-@app.post("/api/setup-usuarios-prueba")
-def setup_usuarios(session: Session = Depends(get_session)):
-    # Verificamos si ya existen para no duplicarlos
-    if session.exec(select(PersonalSalud)).first():
-        return {"mensaje": "Los usuarios ya fueron creados previamente."}
-        
-    # Creamos un Médico
-    medico = PersonalSalud(
-        dni="26719771", 
-        nombre="Dra. Rocio Tordoya", 
-        pin="123456", 
-        rol="medico"
-    )
-    
-    # Creamos un Administrador
-    admin = PersonalSalud(
-        dni="76308504", 
-        nombre="admin", 
-        pin="123456", 
-        rol="admin"
-    )
-    
-    session.add(medico)
-    session.add(admin)
-    session.commit()
-    
-    return {"mensaje": "Usuarios de prueba creados con éxito. Revisa tu pgAdmin."}
-
-
-
-
-@app.post("/api/login")
-def login_web(payload: LoginPayload, session: Session = Depends(get_session)):
-    # 1. Buscamos al usuario por su DNI
-    usuario = session.exec(
-        select(PersonalSalud).where(PersonalSalud.dni == payload.dni)
-    ).first()
-
-    # 2. Si no existe
-    if not usuario:
-        raise HTTPException(status_code=404, detail="El DNI ingresado no está registrado.")
-
-    # 3. Si el PIN es incorrecto
-    if usuario.pin != payload.pin:
-        raise HTTPException(status_code=401, detail="PIN incorrecto. Intente nuevamente.")
-
-    # 4. Si el usuario está desactivado
-    if not usuario.activo:
-        raise HTTPException(status_code=403, detail="Este usuario ha sido desactivado.")
-
-    # 5. Todo correcto, devolvemos los datos y el ROL
-    return {
-        "ok": True,
-        "nombre": usuario.nombre,
-        "rol": usuario.rol,
-        "dni": usuario.dni
-    }
-# Asegúrate de agregar 'estado' a tu modelo Gestante si no lo tienes,
-# o simplemente cambia el campo que quieras modificar.
 
 @app.put("/api/gestantes/{gestante_id}/alta")
-def dar_de_alta_gestante(gestante_id: int, session: Session = Depends(get_session)):
+def dar_de_alta_gestante(gestante_id: int, session: Session = Depends(get_session),
+                         user: PersonalSalud = Depends(require_admin)):
     # Buscamos a la gestante
     gestante = session.get(Gestante, gestante_id)
     

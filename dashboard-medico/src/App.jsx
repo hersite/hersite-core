@@ -1,4 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { restaurarSesionWeb } from './services/auth';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './layouts/Layout';
@@ -10,6 +12,13 @@ import Gestantes from './pages/Gestantes';
 import Tendencias from './pages/Tendencias';
 
 function App() {
+  const [comprobando, setComprobando] = useState(true);
+  useEffect(() => {
+    let activo = true;
+    restaurarSesionWeb().catch(() => {}).finally(() => { if (activo) setComprobando(false); });
+    return () => { activo = false; };
+  }, []);
+  if (comprobando) return <div role="status" className="p-8 text-center text-green-800">Verificando sesión…</div>;
   return (
     <BrowserRouter>
       <Routes>

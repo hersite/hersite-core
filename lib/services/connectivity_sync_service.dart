@@ -1,120 +1,79 @@
 import 'dart:async';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
-
+import 'package:flutter/widgets.dart';
+import 'api_client.dart';
 import 'session_state_service.dart';
 import 'sync_service.dart';
 
-class ConnectivitySyncService {
+class ConnectivitySyncService with WidgetsBindingObserver {
   ConnectivitySyncService._internal();
-
-  static final ConnectivitySyncService instance =
-      ConnectivitySyncService._internal();
-
-  final Connectivity _connectivity = Connectivity();
-
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-
+  static final instance = ConnectivitySyncService._internal();
+  StreamSubscription<List<ConnectivityResult>>? _subscription;
+  Timer? _retry;
   bool _started = false;
-  bool _syncRunning = false;
+  bool _running = false;
 
   Future<void> start() async {
-    if (_started) {
-      return;
+    if (!_started) {
+      _started = true;
+      WidgetsBinding.instance.addObserver(this);
+      _subscription = Connectivity().onConnectivityChanged.listen((_) {
+        unawaited(trySyncNow(reason: 'cambio de red'));
+      }, onError: (Object _) {});
+      _retry = Timer.periodic(const Duration(seconds: 30), (_) {
+        unawaited(trySyncNow(reason: 'reintento'));
+      });
     }
-
-    _started = true;
-
-    _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
-      _onConnectivityChanged,
-      onError: (error) {
-        debugPrint('Error escuchando conectividad: $error');
-      },
-    );
-
-    // Intenta sincronizar al iniciar la app.
-    // No bloquea el arranque visual de Flutter.
-    unawaited(
-      trySyncNow(reason: 'inicio de app'),
-    );
-
-    debugPrint('ConnectivitySyncService iniciado.');
+    unawaited(trySyncNow(reason: 'sesión iniciada'));
   }
 
-  void _onConnectivityChanged(List<ConnectivityResult> results) {
-    debugPrint('Cambio de conectividad detectado: $results');
-
-    final hayConexionBasica = results.any(
-      (result) => result != ConnectivityResult.none,
-    );
-
-    if (!hayConexionBasica) {
-      debugPrint('Sin conexión básica. No se intenta sincronizar.');
-      return;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _started) {
+      unawaited(trySyncNow(reason: 'app reanudada'));
     }
-
-    unawaited(
-      trySyncNow(reason: 'cambio de conectividad'),
-    );
   }
 
   Future<int> trySyncNow({String reason = 'manual'}) async {
-    if (_syncRunning) {
-      debugPrint('Sync ignorado por "$reason": ya hay uno en curso.');
-      return 0;
-    }
-
-    _syncRunning = true;
-
+    if (_running) return 0;
+    _running = true;
+    final generation = SessionStateService.instance.generation;
     try {
-      final sessionClosed =
-          await SessionStateService.instance.isSessionClosed();
-
-      if (sessionClosed) {
-        debugPrint('Sync omitido por "$reason": la sesión está cerrada.');
-        return 0;
-      }
-
-      final activeProfileId =
-          await SessionStateService.instance.getActiveProfileId();
-
-      if (activeProfileId == null) {
-        debugPrint('Sync omitido por "$reason": no hay perfil activo.');
-        return 0;
-      }
-
-      final tieneInternetReal = await InternetConnection().hasInternetAccess;
-
-      if (!tieneInternetReal) {
-        debugPrint(
-          'Sync omitido por "$reason": hay red, pero no internet real.',
+      if (await SessionStateService.instance.isSessionClosed()) return 0;
+      final id = await SessionStateService.instance.getActiveProfileId();
+      if (id == null) return 0;
+      // Comprueba el servidor real, también cuando está en una red local sin internet público.
+      final connected = await ApiClient.instance.comprobarConexion();
+      if (generation != SessionStateService.instance.generation) return 0;
+      if (!connected) {
+        SyncService.instance.estado.value = const EstadoSync(
+          FaseSync.desconectado,
         );
         return 0;
       }
-
-      debugPrint('Sync iniciado por "$reason". Perfil activo: $activeProfileId');
-
-      final sincronizadas =
-          await SyncService.instance.sincronizarEvaluacionesPendientesDelPerfilActivo();
-
-      debugPrint(
-        'Sync finalizado por "$reason". Evaluaciones sincronizadas: $sincronizadas',
-      );
-
-      return sincronizadas;
-    } catch (e) {
-      debugPrint('Error general en trySyncNow por "$reason": $e');
+      return await SyncService.instance
+          .sincronizarEvaluacionesPendientesDelPerfilActivo();
+    } catch (_) {
+      if (generation == SessionStateService.instance.generation) {
+        SyncService.instance.estado.value = const EstadoSync(
+          FaseSync.error,
+          detalle:
+              'No se pudo completar la sincronización. Los datos siguen guardados.',
+        );
+      }
       return 0;
     } finally {
-      _syncRunning = false;
+      _running = false;
     }
   }
 
   Future<void> dispose() async {
-    await _connectivitySubscription?.cancel();
-    _connectivitySubscription = null;
     _started = false;
+    _retry?.cancel();
+    _retry = null;
+    await _subscription?.cancel();
+    _subscription = null;
+    WidgetsBinding.instance.removeObserver(this);
+    SyncService.instance.estado.value = const EstadoSync(FaseSync.comprobando);
   }
 }

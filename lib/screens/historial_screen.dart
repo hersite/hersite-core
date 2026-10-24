@@ -4,10 +4,12 @@ import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
 import '../services/sync_service.dart';
 import '../services/connectivity_sync_service.dart';
+import '../services/api_client.dart';
+import '../services/session_state_service.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
-import 'detalle_evaluacion_screen.dart'; 
+import 'detalle_evaluacion_screen.dart';
 import 'indicador_conexion.dart';
 
 class HistorialScreen extends StatefulWidget {
@@ -48,19 +50,25 @@ class _HistorialScreenState extends State<HistorialScreen> {
     });
 
     try {
-      final totalSincronizadas =
-          await SyncService.instance.sincronizarEvaluacionesPendientesDelPerfilActivo();
+      final totalSincronizadas = await ConnectivitySyncService.instance
+          .trySyncNow(reason: 'historial');
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            totalSincronizadas == 0
-                ? 'No hay evaluaciones pendientes por sincronizar.'
-                : 'Se sincronizaron $totalSincronizadas evaluación(es).',
+            SyncService.instance.estado.value.detalle ??
+                (SyncService.instance.estado.value.fase == FaseSync.alDia
+                    ? totalSincronizadas == 0
+                          ? 'Todos los registros están sincronizados.'
+                          : 'Se sincronizaron $totalSincronizadas evaluación(es).'
+                    : '${SyncService.instance.estado.value.texto}. Los registros pendientes siguen guardados.'),
           ),
-          backgroundColor: const Color(0xFF4C924F),
+          backgroundColor:
+              SyncService.instance.estado.value.fase == FaseSync.error
+              ? Colors.redAccent
+              : const Color(0xFF4C924F),
         ),
       );
 
@@ -86,6 +94,66 @@ class _HistorialScreenState extends State<HistorialScreen> {
   }
 
   // --- LÓGICA DE COLORES SEGÚN TU DISEÑO ---
+  Future<void> _vincularCuenta() async {
+    final ctrl = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vincular con el servidor'),
+        content: TextField(
+          controller: ctrl,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Código entregado por el administrador',
+            helperText: 'Es de un solo uso y dura 10 minutos.',
+            helperMaxLines: 3,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Vincular'),
+          ),
+        ],
+      ),
+    );
+    // El campo puede seguir montado durante la animación de cierre del diálogo.
+    if (code == null || code.isEmpty || !mounted) return;
+    final id = await SessionStateService.instance.getActiveProfileId();
+    if (id == null) return;
+    try {
+      final result = await ApiClient.instance.vincularPerfil(id, codigo: code);
+      if (!result.ok) throw StateError(result.message);
+      await ConnectivitySyncService.instance.trySyncNow(
+        reason: 'cuenta vinculada',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cuenta vinculada. Se enviarán los registros pendientes.',
+          ),
+        ),
+      );
+      await _refrescarEvaluaciones();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is StateError
+                ? error.message
+                : 'No se pudo vincular la cuenta.',
+          ),
+        ),
+      );
+    }
+  }
+
   Map<String, dynamic> _obtenerEstiloPorRiesgo(String nivelRiesgo) {
     if (nivelRiesgo == 'Riesgo_Alto') {
       return {
@@ -128,7 +196,20 @@ class _HistorialScreenState extends State<HistorialScreen> {
   }
 
   String _obtenerMes(int mes) {
-    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const meses = [
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
     return meses[mes - 1];
   }
 
@@ -140,49 +221,63 @@ class _HistorialScreenState extends State<HistorialScreen> {
         backgroundColor: const Color(0xFFFBFFFB),
         elevation: 0,
         automaticallyImplyLeading: false, // Pantalla jefa, sin flecha de atrás
-        title: const Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-
-        ),
+        title: const Row(mainAxisAlignment: MainAxisAlignment.end),
       ),
       body: FutureBuilder<List<EvaluacionRiesgo>>(
         future: _futureEvaluaciones,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFF4C924F)));
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF4C924F)),
+            );
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text('Error cargando historial: ${snapshot.error}'));
+            return Center(
+              child: Text('Error cargando historial: ${snapshot.error}'),
+            );
           }
 
           final evaluaciones = snapshot.data ?? [];
-          
+
           final evaluacionesFiltradas = evaluaciones.where((e) {
             if (_filtroActual == 'Bajo') return e.nivelRiesgo == 'Riesgo_Bajo';
-            if (_filtroActual == 'Medio') return e.nivelRiesgo == 'Riesgo_Medio';
+            if (_filtroActual == 'Medio') {
+              return e.nivelRiesgo == 'Riesgo_Medio';
+            }
             if (_filtroActual == 'Alto') return e.nivelRiesgo == 'Riesgo_Alto';
             return true; // Si es 'Todos'
           }).toList();
 
           // Contamos cuántas hay de cada tipo para los círculos de arriba
-          int countBajo = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Bajo').length;
-          int countMedio = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Medio').length;
-          int countAlto = evaluaciones.where((e) => e.nivelRiesgo == 'Riesgo_Alto').length;
+          int countBajo = evaluaciones
+              .where((e) => e.nivelRiesgo == 'Riesgo_Bajo')
+              .length;
+          int countMedio = evaluaciones
+              .where((e) => e.nivelRiesgo == 'Riesgo_Medio')
+              .length;
+          int countAlto = evaluaciones
+              .where((e) => e.nivelRiesgo == 'Riesgo_Alto')
+              .length;
 
-          final countPendientes = evaluaciones.where((e) => e.syncStatus == 'pendiente').length;
-          
+          final countPendientes = evaluaciones
+              .where((e) => e.syncStatus == 'pendiente')
+              .length;
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // TITULOS DE CABECERA
               Container(
                 width: double.infinity,
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF306339), 
-                  borderRadius: BorderRadius.circular(15)
+                  color: const Color(0xFF306339),
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,19 +285,19 @@ class _HistorialScreenState extends State<HistorialScreen> {
                     Text(
                       'Historial',
                       style: TextStyle(
-                        color: Colors.white, 
-                        fontSize: 24, 
-                        fontWeight: FontWeight.bold, 
-                        fontFamily: 'Poltawski Nowy'
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Poltawski Nowy',
                       ),
                     ),
                     SizedBox(height: 5),
                     Text(
                       'Tus últimas evaluaciones',
                       style: TextStyle(
-                        color: Color(0xFFEEFFEF), 
-                        fontSize: 15, 
-                        fontFamily: 'Poltawski Nowy'
+                        color: Color(0xFFEEFFEF),
+                        fontSize: 15,
+                        fontFamily: 'Poltawski Nowy',
                       ),
                     ),
                   ],
@@ -211,7 +306,10 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
               // RESUMEN DE CÍRCULOS DINÁMICOS
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -221,9 +319,18 @@ class _HistorialScreenState extends State<HistorialScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildContadorCirculo(countBajo.toString(), const Color(0xFF4C924F)), // Estable (Verde)
-                    _buildContadorCirculo(countMedio.toString(), const Color.fromARGB(255, 240, 208, 66)), // Precaución (Amarillo)
-                    _buildContadorCirculo(countAlto.toString(), const Color(0xFFD33232)), // Urgente (Rojo)
+                    _buildContadorCirculo(
+                      countBajo.toString(),
+                      const Color(0xFF4C924F),
+                    ), // Estable (Verde)
+                    _buildContadorCirculo(
+                      countMedio.toString(),
+                      const Color.fromARGB(255, 240, 208, 66),
+                    ), // Precaución (Amarillo)
+                    _buildContadorCirculo(
+                      countAlto.toString(),
+                      const Color(0xFFD33232),
+                    ), // Urgente (Rojo)
                   ],
                 ),
               ),
@@ -249,7 +356,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        countPendientes > 0 ? Icons.cloud_upload : Icons.cloud_done,
+                        countPendientes > 0
+                            ? Icons.cloud_upload
+                            : Icons.cloud_done,
                         color: countPendientes > 0
                             ? const Color(0xFFB69500)
                             : const Color(0xFF4C924F),
@@ -271,7 +380,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
                       ),
                       if (countPendientes > 0)
                         TextButton(
-                          onPressed: _sincronizando ? null : _sincronizarPendientes,
+                          onPressed: _sincronizando
+                              ? null
+                              : _sincronizarPendientes,
                           child: Text(
                             _sincronizando ? 'Enviando...' : 'Sincronizar',
                             style: const TextStyle(
@@ -286,19 +397,32 @@ class _HistorialScreenState extends State<HistorialScreen> {
               ),
               const SizedBox(height: 12),
 
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _vincularCuenta,
+                  icon: const Icon(Icons.link),
+                  label: const Text('Vincular cuenta existente'),
+                ),
+              ),
               // BARRA DE FILTROS
               _buildFiltros(),
 
               // LISTA SCROLLEABLE DE TARJETAS DESDE SQLITE
               Expanded(
                 child: evaluacionesFiltradas.isEmpty
-                    ? const Center(child: Text('No hay evaluaciones para este filtro.', style: TextStyle(color: Colors.grey)))
+                    ? const Center(
+                        child: Text(
+                          'No hay evaluaciones para este filtro.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
                     : RefreshIndicator(
-                        onRefresh:() async {
+                        onRefresh: () async {
                           await ConnectivitySyncService.instance.trySyncNow(
                             reason: 'refresco manual de historial',
                           );
-                          
+
                           await _refrescarEvaluaciones();
                         },
                         color: const Color(0xFF4C924F),
@@ -307,16 +431,19 @@ class _HistorialScreenState extends State<HistorialScreen> {
                           itemCount: evaluacionesFiltradas.length,
                           itemBuilder: (context, index) {
                             final evaluacion = evaluacionesFiltradas[index];
-                            final estilo = _obtenerEstiloPorRiesgo(evaluacion.nivelRiesgo);
+                            final estilo = _obtenerEstiloPorRiesgo(
+                              evaluacion.nivelRiesgo,
+                            );
 
                             return GestureDetector(
                               onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => DetalleEvaluacionScreen(
-                                      evaluacion: evaluacion,
-                                    ),
+                                    builder: (context) =>
+                                        DetalleEvaluacionScreen(
+                                          evaluacion: evaluacion,
+                                        ),
                                   ),
                                 );
                               },
@@ -326,14 +453,19 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                 decoration: BoxDecoration(
                                   color: estilo['colorFondo'],
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: estilo['colorBorde'], width: 2),
+                                  border: Border.all(
+                                    color: estilo['colorBorde'],
+                                    width: 2,
+                                  ),
                                 ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             estilo['titulo'],
@@ -346,7 +478,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            _resumenSintomas(evaluacion.sintomasDetectados),
+                                            _resumenSintomas(
+                                              evaluacion.sintomasDetectados,
+                                            ),
                                             style: const TextStyle(
                                               color: Color(0xFF434C43),
                                               fontSize: 14,
@@ -368,7 +502,8 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                       ),
                                     ),
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         Text(
                                           _formatearFecha(evaluacion.fechaHora),
@@ -380,11 +515,14 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         Icon(
-                                          evaluacion.syncStatus == 'sincronizado'
+                                          evaluacion.syncStatus ==
+                                                  'sincronizado'
                                               ? Icons.cloud_done
                                               : Icons.cloud_off,
                                           size: 14,
-                                          color: evaluacion.syncStatus == 'sincronizado'
+                                          color:
+                                              evaluacion.syncStatus ==
+                                                  'sincronizado'
                                               ? const Color(0xFF4C924F)
                                               : Colors.grey,
                                         ),
@@ -418,17 +556,32 @@ class _HistorialScreenState extends State<HistorialScreen> {
         currentIndex: 1,
         onTap: (index) {
           if (index == 0) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const Home()));
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const Home()),
+            );
           } else if (index == 2) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AprendeScreen()));
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const AprendeScreen()),
+            );
           } else if (index == 3) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const PerfilScreen()));
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const PerfilScreen()),
+            );
           }
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Historial'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Aprende'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite),
+            label: 'Historial',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book),
+            label: 'Aprende',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
         ],
       ),
@@ -442,14 +595,15 @@ class _HistorialScreenState extends State<HistorialScreen> {
         Container(
           width: 45,
           height: 45,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           child: Center(
             child: Text(
               numero,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
@@ -463,7 +617,7 @@ class _HistorialScreenState extends State<HistorialScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       margin: const EdgeInsets.only(bottom: 10),
       child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal, 
+        scrollDirection: Axis.horizontal,
         child: Row(
           children: ['Todos', 'Bajo', 'Medio', 'Alto'].map((filtro) {
             bool activo = _filtroActual == filtro;
@@ -471,9 +625,14 @@ class _HistorialScreenState extends State<HistorialScreen> {
               onTap: () => setState(() => _filtroActual = filtro),
               child: Container(
                 margin: const EdgeInsets.only(right: 10),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: activo ? const Color(0xFF4C924F) : Colors.grey.shade200,
+                  color: activo
+                      ? const Color(0xFF4C924F)
+                      : Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(

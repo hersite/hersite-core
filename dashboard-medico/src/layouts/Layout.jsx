@@ -17,9 +17,13 @@ export default function Layout() {
   const [estadoSistema, setEstadoSistema] = useState(null);
   const session = obtenerSesionWeb() || { nombre: 'Usuario Clínico', rol: 'medico' };
 
-  const cerrarSesion = () => {
-    cerrarSesionWeb();
-    navigate('/', { replace: true });
+  const cerrarSesion = async () => {
+    try {
+      await cerrarSesionWeb();
+      navigate('/', { replace: true });
+    } catch {
+      window.alert('No se pudo cerrar la sesión en el servidor. Revisa la conexión e inténtalo nuevamente.');
+    }
   };
 
   const getInitials = (name) => {

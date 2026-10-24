@@ -8,10 +8,7 @@ import '../services/pin_security_service.dart';
 class CambiarPinScreen extends StatefulWidget {
   final PerfilGestante perfil;
 
-  const CambiarPinScreen({
-    super.key,
-    required this.perfil,
-  });
+  const CambiarPinScreen({super.key, required this.perfil});
 
   @override
   State<CambiarPinScreen> createState() => _CambiarPinScreenState();
@@ -74,52 +71,37 @@ class _CambiarPinScreenState extends State<CambiarPinScreen> {
       return;
     }
 
-    final hashActualIngresado = PinSecurityService.instance.hashPin(
-      pin: pinActual,
-      salt: widget.perfil.pinSalt,
-    );
-
-    if (hashActualIngresado != widget.perfil.pinHash) {
-      _mostrarError('El PIN actual no es correcto.');
-      return;
-    }
-
     setState(() {
       _guardando = true;
       _mensajeError = null;
     });
 
     try {
+      final pinValido = await PinSecurityService.instance.verificarConLimite(
+        perfilId: widget.perfil.id!,
+        pin: pinActual,
+        hash: widget.perfil.pinHash,
+        salt: widget.perfil.pinSalt,
+      );
+      if (!mounted) return;
+      if (!pinValido) {
+        setState(() => _guardando = false);
+        _mostrarError('El PIN actual no es correcto.');
+        return;
+      }
+
       final nuevoSalt = PinSecurityService.instance.generateSalt();
 
-      final nuevoHash = PinSecurityService.instance.hashPin(
+      final nuevoHash = await PinSecurityService.instance.hashPin(
         pin: nuevoPin,
         salt: nuevoSalt,
       );
 
-      final perfilActualizado = PerfilGestante(
-        id: widget.perfil.id,
-        nombre: widget.perfil.nombre,
-        dni: widget.perfil.dni,
-        celular: widget.perfil.celular,
-        pinHash: nuevoHash,
-        pinSalt: nuevoSalt,
-        edadMaterna: widget.perfil.edadMaterna,
-        semanasGestacion: widget.perfil.semanasGestacion,
-        numeroEmbarazos: widget.perfil.numeroEmbarazos,
-        cesareaPrevia: widget.perfil.cesareaPrevia,
-        diabetes: widget.perfil.diabetes,
-        hipertensionPrevia: widget.perfil.hipertensionPrevia,
-        preeclampsiaPrevia: widget.perfil.preeclampsiaPrevia,
-        anemiaGestacional: widget.perfil.anemiaGestacional,
-        presionBasalDisponible: widget.perfil.presionBasalDisponible,
-        embarazoMultiple: widget.perfil.embarazoMultiple,
-        antecedenteHemorragia: widget.perfil.antecedenteHemorragia,
-        presionBasalSistolica: widget.perfil.presionBasalSistolica,
-        presionBasalDiastolica: widget.perfil.presionBasalDiastolica,
+      await LocalDatabase.instance.actualizarCredencialesPin(
+        widget.perfil.id!,
+        nuevoHash,
+        nuevoSalt,
       );
-
-      await LocalDatabase.instance.guardarOActualizarPerfil(perfilActualizado);
 
       if (!mounted) return;
 
@@ -129,7 +111,9 @@ class _CambiarPinScreenState extends State<CambiarPinScreen> {
 
       setState(() {
         _guardando = false;
-        _mensajeError = 'Error al cambiar el PIN: $e';
+        _mensajeError = e is StateError
+            ? e.message
+            : 'No se pudo cambiar el PIN. Inténtalo nuevamente.';
       });
     }
   }
@@ -296,9 +280,7 @@ class _CambiarPinScreenState extends State<CambiarPinScreen> {
         border: const OutlineInputBorder(),
         suffixIcon: IconButton(
           onPressed: _guardando ? null : onToggle,
-          icon: Icon(
-            visible ? Icons.visibility_off : Icons.visibility,
-          ),
+          icon: Icon(visible ? Icons.visibility_off : Icons.visibility),
         ),
       ),
     );

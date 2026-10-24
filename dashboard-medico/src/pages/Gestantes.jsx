@@ -1,3 +1,5 @@
+import { probabilidadesModelo } from '../utils/probabilidades';
+import { esAdminWeb } from '../services/auth';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search,
@@ -66,22 +68,9 @@ function obtenerRiesgoUi(nivelRiesgo) {
   return { riesgo: 'SIN DATOS', riesgoClass: 'none', label: 'SIN EVALUACIONES' };
 }
 
-function obtenerProbabilidadesModelo(detalle, riesgoClass) {
-  const probs = detalle?.probabilidades;
-  if (Array.isArray(probs)) {
-    const valores = Array.isArray(probs[0]) ? probs[0] : probs;
-    if (valores.length >= 3) {
-      return {
-        bajo: Math.round((Number(valores[0]) || 0) * 100),
-        medio: Math.round((Number(valores[1]) || 0) * 100),
-        alto: Math.round((Number(valores[2]) || 0) * 100),
-      };
-    }
-  }
-  if (riesgoClass === 'danger') return { bajo: 5, medio: 10, alto: 85 };
-  if (riesgoClass === 'warn') return { bajo: 25, medio: 65, alto: 10 };
-  if (riesgoClass === 'none') return { bajo: 0, medio: 0, alto: 0 };
-  return { bajo: 90, medio: 8, alto: 2 };
+function obtenerProbabilidadesModelo(detalle) {
+  const probs = probabilidadesModelo(detalle?.probabilidades);
+  return probs ? { bajo: Math.round(probs[0] * 100), medio: Math.round(probs[1] * 100), alto: Math.round(probs[2] * 100) } : null;
 }
 
 function construirDetalleHistorial(evaluacion) {
@@ -171,7 +160,7 @@ export default function Gestantes() {
   
   const [procesandoAlta, setProcesandoAlta] = useState(false);
 
-  const isAdmin = localStorage.getItem('rol') === 'admin' || localStorage.getItem('role') === 'admin';
+  const isAdmin = esAdminWeb();
 
   const adaptarGestante = async (gestante) => {
     const respuesta = await api.getEvaluacionesPorGestante(gestante.id);
@@ -179,7 +168,7 @@ export default function Gestantes() {
     const ultimaEvaluacion = evaluaciones[0] || null;
 
     const riesgoUi = obtenerRiesgoUi(ultimaEvaluacion?.nivel_riesgo);
-    const horasDesdeSync = calcularHorasDesde(ultimaEvaluacion?.fecha_hora);
+    const horasDesdeSync = calcularHorasDesde(ultimaEvaluacion?.recibido_en);
 
     return {
       id: gestante.id,
@@ -197,7 +186,7 @@ export default function Gestantes() {
       embarazoMultiple: gestante.embarazo_multiple ?? 0,
       antecedenteHemorragia: gestante.antecedente_hemorragia ?? 0,
       tiempoCentroSalud: gestante.tiempo_centro_salud ?? 'No registrado',
-      ultimaSync: ultimaEvaluacion ? calcularUltimaSync(ultimaEvaluacion.fecha_hora) : 'Sin evaluaciones',
+      ultimaSync: ultimaEvaluacion?.recibido_en ? calcularUltimaSync(ultimaEvaluacion.recibido_en) : 'Recepción no disponible',
       horasDesdeSync,
       ultimaEvaluacionId: ultimaEvaluacion?.id ?? null,
       ultimaFecha: ultimaEvaluacion?.fecha_hora ?? null,
@@ -210,7 +199,7 @@ export default function Gestantes() {
         const riesgoHistorial = obtenerRiesgoUi(evaluacion.nivel_riesgo);
         return {
           id: evaluacion.id,
-          semana: gestante.semanas_gestacion ?? '--',
+          semana: evaluacion.semanas_gestacion ?? '--',
           fecha: formatearFecha(evaluacion.fecha_hora),
           riesgo: riesgoHistorial.riesgo,
           riesgoClass: riesgoHistorial.riesgoClass,
@@ -317,7 +306,7 @@ export default function Gestantes() {
     }
   };
 
-  const probabilidades = obtenerProbabilidadesModelo(detalleSeleccionado, seleccionada?.riesgoClass);
+  const probabilidades = obtenerProbabilidadesModelo(detalleSeleccionado);
 
   if (loading) {
     return (
@@ -658,36 +647,55 @@ export default function Gestantes() {
                       <div>
                         <div className="mb-1 flex justify-between text-xs">
                           <span className="font-semibold text-slate-700 dark:text-slate-300">Riesgo bajo</span>
-                          <span className="font-bold text-green-700 dark:text-green-500">{probabilidades.bajo}%</span>
+                          <span className="font-bold text-green-700 dark:text-green-500">{probabilidades ? `${probabilidades.bajo}%` : "No disponible"}</span>
                         </div>
                         <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
-                          <div className="h-2 rounded-full bg-green-500 transition-all" style={{ width: `${probabilidades.bajo}%` }}></div>
+                          <div className="h-2 rounded-full bg-green-500 transition-all" style={{ width: `${probabilidades?.bajo ?? 0}%` }}></div>
                         </div>
                       </div>
 
                       <div>
                         <div className="mb-1 flex justify-between text-xs">
                           <span className="font-semibold text-slate-700 dark:text-slate-300">Riesgo medio</span>
-                          <span className="font-bold text-amber-600 dark:text-amber-500">{probabilidades.medio}%</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-500">{probabilidades ? `${probabilidades.medio}%` : "No disponible"}</span>
                         </div>
                         <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
-                          <div className="h-2 rounded-full bg-amber-500 transition-all" style={{ width: `${probabilidades.medio}%` }}></div>
+                          <div className="h-2 rounded-full bg-amber-500 transition-all" style={{ width: `${probabilidades?.medio ?? 0}%` }}></div>
                         </div>
                       </div>
 
                       <div>
                         <div className="mb-1 flex justify-between text-xs">
                           <span className="font-semibold text-slate-700 dark:text-slate-300">Riesgo alto</span>
-                          <span className="font-bold text-red-600 dark:text-red-500">{probabilidades.alto}%</span>
+                          <span className="font-bold text-red-600 dark:text-red-500">{probabilidades ? `${probabilidades.alto}%` : "No disponible"}</span>
                         </div>
                         <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
-                          <div className="h-2 rounded-full bg-red-500 transition-all" style={{ width: `${probabilidades.alto}%` }}></div>
+                          <div className="h-2 rounded-full bg-red-500 transition-all" style={{ width: `${probabilidades?.alto ?? 0}%` }}></div>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
 
+                {isAdmin && (<div className="flex flex-wrap gap-2 mb-3">
+                  <button className="rounded-lg border border-green-700 px-3 py-2 text-green-800 dark:text-green-300" onClick={async () => {
+                    try { const data = await api.crearVinculacion(seleccionada.id); window.prompt("Código de un solo uso, válido por 10 minutos. Vincular otro teléfono revoca el anterior:", data.codigo); }
+                    catch (error) { window.alert(error.message); }
+                  }}>Vincular teléfono</button>
+                  <button className="rounded-lg border border-green-700 px-3 py-2 text-green-800 dark:text-green-300" onClick={async () => {
+                    const dni = window.prompt("DNI del profesional al que deseas dar acceso:");
+                    if (!dni) return;
+                    if (!/^\d{8}$/.test(dni)) { window.alert("Ingresa un DNI de 8 números."); return; }
+                    try { await api.asignarProfesional(seleccionada.id, dni); window.alert("Acceso asignado."); }
+                    catch (error) { window.alert(error.message); }
+                  }}>Asignar profesional</button>
+                  <button className="rounded-lg border border-green-700 px-3 py-2 text-green-800 dark:text-green-300" onClick={async () => {
+                    const dni = window.prompt("DNI del profesional cuyo acceso deseas retirar:");
+                    if (!dni || !/^\d{8}$/.test(dni)) return;
+                    try { await api.retirarProfesional(seleccionada.id, dni); window.alert("Acceso retirado."); }
+                    catch (error) { window.alert(error.message); }
+                  }}>Retirar acceso</button>
+                </div>)}
                 {isAdmin && (
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800/60 bg-white dark:bg-slate-900 p-5 shadow-sm transition-colors duration-300">
                     <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">

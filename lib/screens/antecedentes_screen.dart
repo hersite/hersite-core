@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
-import '../services/api_client.dart';
+import 'dart:async';
+import '../services/connectivity_sync_service.dart';
 import '../services/session_state_service.dart';
+import '../widgets/resumen_registro_dialog.dart';
 import 'home_screen.dart';
-import 'indicador_conexion.dart'; // NUEVO IMPORT AÑADIDO
 
 class AntecedentesScreen extends StatefulWidget {
   final bool esEdicion;
@@ -18,6 +19,13 @@ class AntecedentesScreen extends StatefulWidget {
 }
 
 class _AntecedentesScreenState extends State<AntecedentesScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _embarazosKey = GlobalKey<FormFieldState<String>>();
+  final _sistolicaKey = GlobalKey<FormFieldState<String>>();
+  final _diastolicaKey = GlobalKey<FormFieldState<String>>();
+  final _presionKey = GlobalKey();
+  final _preguntaKeys = List.generate(7, (_) => GlobalKey());
+  bool _validacionActiva = false;
   final TextEditingController _embarazosCtrl = TextEditingController();
   final TextEditingController _sistolicaBasalCtrl = TextEditingController();
   final TextEditingController _diastolicaBasalCtrl = TextEditingController();
@@ -36,6 +44,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
   final Map<int, bool> _respuestas = {};
   bool _isSaving = false;
+  bool _mostrandoResumen = false;
 
   @override
   void initState() {
@@ -43,8 +52,32 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
     if (widget.esEdicion) {
       _cargarDatosExistentes();
+    } else {
+      final datos = PerfilGestanteTemp.obtener();
+      if (datos != null) {
+        _embarazosCtrl.text = '${datos['Numero_Embarazos'] ?? ''}';
+        _sistolicaBasalCtrl.text = '${datos['Presion_Basal_Sistolica'] ?? ''}';
+        _diastolicaBasalCtrl.text =
+            '${datos['Presion_Basal_Diastolica'] ?? ''}';
+        final disponible = datos['Presion_Basal_Disponible'];
+        _presionBasalDisponible = disponible == null ? null : disponible == 1;
+        for (var i = 0; i < _clavesCondiciones.length; i++) {
+          final respuesta = datos[_clavesCondiciones[i]];
+          if (respuesta != null) _respuestas[i] = respuesta == 1;
+        }
+      }
     }
   }
+
+  static const _clavesCondiciones = [
+    'Cesarea_Previa',
+    'Diabetes',
+    'Hipertension_Previa',
+    'Preeclampsia_Previa',
+    'Anemia_Gestacional',
+    'Embarazo_Multiple',
+    'Antecedente_Hemorragia',
+  ];
 
   Future<void> _cargarDatosExistentes() async {
     final perfilDb = await LocalDatabase.instance.obtenerPerfil();
@@ -57,8 +90,8 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
         if (_presionBasalDisponible == true) {
           _sistolicaBasalCtrl.text = perfilDb.presionBasalSistolica.toString();
-          _diastolicaBasalCtrl.text =
-              perfilDb.presionBasalDiastolica.toString();
+          _diastolicaBasalCtrl.text = perfilDb.presionBasalDiastolica
+              .toString();
         } else {
           _sistolicaBasalCtrl.clear();
           _diastolicaBasalCtrl.clear();
@@ -92,159 +125,172 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     });
   }
 
-  Future<void> _guardarYContinuar() async {
-    if (_isSaving) return;
-
-    setState(() => _isSaving = true);
-
-    if (_embarazosCtrl.text.trim().isEmpty) {
-      _mostrarError('Por favor completa el número de embarazos.');
-      return;
+  String? _validarEmbarazos(String? valor) {
+    if ((valor ?? '').trim().isEmpty) {
+      return 'Indica cuántos embarazos has tenido, incluido este.';
     }
-
-    if (_presionBasalDisponible == null) {
-      _mostrarError('Por favor indica si conoces tu presión arterial basal.');
-      return;
+    final numero = int.tryParse(valor!.trim());
+    if (numero == null || numero < 1) {
+      return 'Escribe un número entero mayor o igual a 1.';
     }
+    return null;
+  }
 
-    if (_presionBasalDisponible == true &&
-        (_sistolicaBasalCtrl.text.trim().isEmpty ||
-            _diastolicaBasalCtrl.text.trim().isEmpty)) {
-      _mostrarError('Por favor completa la presión basal o marca que no la conoces.');
-      return;
+  String? _validarSistolica(String? valor) {
+    if (_presionBasalDisponible != true) return null;
+    if ((valor ?? '').trim().isEmpty) return 'Ingresa la presión sistólica.';
+    final numero = int.tryParse(valor!.trim());
+    if (numero == null || numero < 80 || numero > 180) {
+      return 'Usa un número entero entre 80 y 180 mmHg.';
     }
+    return null;
+  }
 
-    if (_respuestas.length < _preguntasBooleanas.length) {
-      _mostrarError('Por favor responde Sí o No a todas las condiciones.');
-      return;
+  String? _validarDiastolica(String? valor) {
+    if (_presionBasalDisponible != true) return null;
+    if ((valor ?? '').trim().isEmpty) return 'Ingresa la presión diastólica.';
+    final numero = int.tryParse(valor!.trim());
+    if (numero == null || numero < 40 || numero > 120) {
+      return 'Usa un número entero entre 40 y 120 mmHg.';
     }
-
-    final numeroEmbarazos = int.tryParse(_embarazosCtrl.text.trim());
-
-    if (numeroEmbarazos == null || numeroEmbarazos <= 0) {
-      _mostrarError('Verifica que el número de embarazos sea correcto.');
-      return;
+    final sistolica = int.tryParse(_sistolicaBasalCtrl.text.trim());
+    if (sistolica != null && numero >= sistolica) {
+      return 'La diastólica debe ser menor que la sistólica.';
     }
+    return null;
+  }
 
-    int presionBasalSistolica = -1;
-    int presionBasalDiastolica = -1;
-
-    if (_presionBasalDisponible == true) {
-      final sistolica = int.tryParse(_sistolicaBasalCtrl.text.trim());
-      final diastolica = int.tryParse(_diastolicaBasalCtrl.text.trim());
-
-      if (sistolica == null || diastolica == null) {
-        _mostrarError('Verifica que los valores de presión basal sean numéricos.');
-        return;
-      }
-
-      if (sistolica < 80 || sistolica > 180) {
-        _mostrarError('La presión sistólica basal debe estar entre 80 y 180.');
-        return;
-      }
-
-      if (diastolica < 40 || diastolica > 120) {
-        _mostrarError('La presión diastólica basal debe estar entre 40 y 120.');
-        return;
-      }
-
-      if (diastolica >= sistolica) {
-        _mostrarError('La presión diastólica no puede ser mayor o igual que la sistólica.');
-        return;
-      }
-
-      presionBasalSistolica = sistolica;
-      presionBasalDiastolica = diastolica;
-    }
-
-    final perfilDb = await LocalDatabase.instance.obtenerPerfil();
-
-    if (perfilDb != null) {
-      PerfilGestanteTemp.actualizar({
-        ...perfilDb.toModelInput(),
-        'IdPerfil': perfilDb.id,
-        'Nombre': perfilDb.nombre,
-        'DNI': perfilDb.dni,
-        'Celular': perfilDb.celular,
-        'PinHash': perfilDb.pinHash,
-        'PinSalt': perfilDb.pinSalt,
-      });
-    }
-
-    PerfilGestanteTemp.actualizar({
-      'Numero_Embarazos': numeroEmbarazos,
-      'Cesarea_Previa': _respuestas[0] == true ? 1 : 0,
-      'Diabetes': _respuestas[1] == true ? 1 : 0,
-      'Hipertension_Previa': _respuestas[2] == true ? 1 : 0,
-      'Preeclampsia_Previa': _respuestas[3] == true ? 1 : 0,
-      'Anemia_Gestacional': _respuestas[4] == true ? 1 : 0,
-      'Embarazo_Multiple': _respuestas[5] == true ? 1 : 0,
-      'Antecedente_Hemorragia': _respuestas[6] == true ? 1 : 0,
-      'Presion_Basal_Disponible': _presionBasalDisponible == true ? 1 : 0,
-      'Presion_Basal_Sistolica': presionBasalSistolica,
-      'Presion_Basal_Diastolica': presionBasalDiastolica,
-    });
-
-    final perfilMap = PerfilGestanteTemp.obtener();
-
-    if (perfilMap == null ||
-        perfilMap['Edad_Materna'] == null ||
-        perfilMap['Semanas_Gestacion'] == null) {
-      _mostrarError('No se encontró el perfil de la gestante.');
-      return;
-    }
-
-    final perfil = PerfilGestante.fromTempMap(perfilMap);
-
-    try {
-      final perfilId =
-          await LocalDatabase.instance.guardarOActualizarPerfil(perfil);
-
-      await SessionStateService.instance.setActiveProfileId(perfilId);
-      await SessionStateService.instance.markSessionActive();
-
-      try {
-        await ApiClient.instance.enviarPerfil(perfil);
-        debugPrint('Antecedentes sincronizados con el servidor.');
-      } catch (e) {
-        debugPrint(
-          'Antecedentes guardados localmente. Se sincronizarán luego: $e',
+  bool _validarFormulario() {
+    setState(() => _validacionActiva = true);
+    _formKey.currentState!.validate();
+    final errores = <GlobalKey>[
+      if (_embarazosKey.currentState?.hasError == true) _embarazosKey,
+      if (_presionBasalDisponible == null) _presionKey,
+      if (_sistolicaKey.currentState?.hasError == true) _sistolicaKey,
+      if (_diastolicaKey.currentState?.hasError == true) _diastolicaKey,
+      for (var i = 0; i < _preguntasBooleanas.length; i++)
+        if (!_respuestas.containsKey(i)) _preguntaKeys[i],
+    ];
+    if (errores.isEmpty) return true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final campo = errores.first.currentContext;
+      if (campo != null) {
+        Scrollable.ensureVisible(
+          campo,
+          duration: const Duration(milliseconds: 300),
+          alignment: 0.1,
         );
       }
+    });
+    return false;
+  }
 
-      await LocalDatabase.instance.obtenerPerfil();
+  void _guardarBorrador() {
+    PerfilGestanteTemp.actualizar({
+      'Numero_Embarazos':
+          int.tryParse(_embarazosCtrl.text.trim()) ??
+          _embarazosCtrl.text.trim(),
+      'Presion_Basal_Disponible': _presionBasalDisponible == null
+          ? null
+          : (_presionBasalDisponible! ? 1 : 0),
+      'Presion_Basal_Sistolica':
+          int.tryParse(_sistolicaBasalCtrl.text.trim()) ??
+          _sistolicaBasalCtrl.text.trim(),
+      'Presion_Basal_Diastolica':
+          int.tryParse(_diastolicaBasalCtrl.text.trim()) ??
+          _diastolicaBasalCtrl.text.trim(),
+      for (var i = 0; i < _clavesCondiciones.length; i++)
+        _clavesCondiciones[i]: _respuestas[i] == null
+            ? null
+            : (_respuestas[i]! ? 1 : 0),
+    });
+  }
 
+  Future<void> _guardarYContinuar() async {
+    if (_isSaving || _mostrandoResumen || !_validarFormulario()) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _isSaving = true);
+    try {
+      // Solo al editar se toma el perfil activo. Un alta usa su propio borrador.
+      if (widget.esEdicion) {
+        final perfilDb = await LocalDatabase.instance.obtenerPerfil();
+        if (perfilDb == null) throw StateError('No se encontró el perfil.');
+        PerfilGestanteTemp.guardar({
+          ...perfilDb.toDraftMap(),
+          'Semanas_Gestacion': perfilDb.semanasGestacion,
+          'IdPerfil': perfilDb.id,
+          'Nombre': perfilDb.nombre,
+          'DNI': perfilDb.dni,
+          'Celular': perfilDb.celular,
+          'PinHash': perfilDb.pinHash,
+          'PinSalt': perfilDb.pinSalt,
+        });
+      }
+      _guardarBorrador();
+      PerfilGestanteTemp.actualizar({
+        'Numero_Embarazos': int.parse(_embarazosCtrl.text.trim()),
+        'Presion_Basal_Sistolica': _presionBasalDisponible == true
+            ? int.parse(_sistolicaBasalCtrl.text.trim())
+            : -1,
+        'Presion_Basal_Diastolica': _presionBasalDisponible == true
+            ? int.parse(_diastolicaBasalCtrl.text.trim())
+            : -1,
+      });
+      final datos = PerfilGestanteTemp.obtener();
+      if (datos == null ||
+          datos['Edad_Materna'] == null ||
+          datos['Semanas_Gestacion'] == null) {
+        _mostrarError(
+          'No se encontraron los datos personales. Vuelve al primer paso.',
+        );
+        return;
+      }
       if (!mounted) return;
-
-      setState(() => _isSaving = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Datos guardados y actualizados',
-            style: TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Color(0xFF4C924F),
-        ),
+      if (!widget.esEdicion) {
+        setState(() {
+          _isSaving = false;
+          _mostrandoResumen = true;
+        });
+        final confirmado = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ResumenRegistroDialog(datos: datos),
+        );
+        if (!mounted) return;
+        setState(() => _mostrandoResumen = false);
+        if (confirmado != true) {
+          if (confirmado == false) Navigator.pop(context);
+          return;
+        }
+        setState(() => _isSaving = true);
+      }
+      final perfil = PerfilGestante.fromTempMap(datos);
+      final perfilId = await LocalDatabase.instance.guardarOActualizarPerfil(
+        perfil,
       );
-
+      await SessionStateService.instance.setActiveProfileId(perfilId);
+      await SessionStateService.instance.markSessionActive();
+      unawaited(ConnectivitySyncService.instance.start());
+      await LocalDatabase.instance.obtenerPerfil();
+      if (!mounted) return;
       if (widget.esEdicion) {
         Navigator.pop(context, true);
       } else {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => const Home()),
+          MaterialPageRoute(builder: (_) => const Home()),
+          (_) => false,
         );
       }
-    } catch (e) {
+    } catch (_) {
+      _mostrarError('No se pudieron guardar los datos. Inténtalo nuevamente.');
+    } finally {
       if (mounted) {
-        setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        setState(() {
+          _isSaving = false;
+          _mostrandoResumen = false;
+        });
       }
     }
   }
@@ -255,10 +301,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     setState(() => _isSaving = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: Colors.redAccent,
-      ),
+      SnackBar(content: Text(mensaje), backgroundColor: Colors.redAccent),
     );
   }
 
@@ -272,179 +315,207 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFBFFFB),
-      appBar: AppBar(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop && !widget.esEdicion) _guardarBorrador();
+      },
+      child: Scaffold(
         backgroundColor: const Color(0xFFFBFFFB),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFFBFFFB),
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: _isSaving ? null : () => Navigator.pop(context),
+          ),
+          title: Row(mainAxisAlignment: MainAxisAlignment.end),
         ),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.end, 
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.esEdicion
-                        ? 'Editar antecedentes'
-                        : 'Antecedentes médicos',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Poltawski Nowy',
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  if (!widget.esEdicion) ...[
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: Color(0xFF4C924F),
-                          size: 18,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          'Paso 2 de 2: ¡Ya casi terminas!',
-                          style: TextStyle(
-                            color: Color(0xFF4C924F),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                  ],
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEEFFEF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'Estos datos base ayudarán al modelo a darte una evaluación mucho más precisa.',
-                      style: TextStyle(
-                        color: Color(0xFF306339),
-                        fontSize: 13,
-                        fontFamily: 'Poltawski Nowy',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  const Text(
-                    '1. Valores Base',
-                    style: TextStyle(
-                      color: Color(0xFF306339),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Poltawski Nowy',
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFFB9BAB9),
-                        width: 2,
-                      ),
-                    ),
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            autovalidateMode: _validacionActiva
+                ? AutovalidateMode.onUserInteraction
+                : AutovalidateMode.disabled,
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Número total de embarazos (incluyendo este)',
-                          style: TextStyle(
+                        Text(
+                          widget.esEdicion
+                              ? 'Editar antecedentes'
+                              : 'Antecedentes médicos',
+                          style: const TextStyle(
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF434C43),
+                            fontFamily: 'Poltawski Nowy',
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _embarazosCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: 'Ej. 2',
+                        const SizedBox(height: 5),
+                        if (!widget.esEdicion) ...[
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                color: Color(0xFF4C924F),
+                                size: 18,
+                              ),
+                              SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  'Paso 2 de 2: ¡Ya casi terminas!',
+                                  style: TextStyle(
+                                    color: Color(0xFF4C924F),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 15),
+                        ],
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEFFEF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text(
+                            'Estos datos base ayudarán al modelo a darte una evaluación mucho más precisa.',
+                            style: TextStyle(
+                              color: Color(0xFF306339),
+                              fontSize: 13,
+                              fontFamily: 'Poltawski Nowy',
+                            ),
                           ),
                         ),
+                        const SizedBox(height: 25),
+                        if (_validacionActiva) ...[
+                          const Text(
+                            'Revisa los campos resaltados y responde las preguntas pendientes.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF434C43),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        const Text(
+                          '1. Valores Base',
+                          style: TextStyle(
+                            color: Color(0xFF306339),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Poltawski Nowy',
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFFB9BAB9),
+                              width: 2,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Número total de embarazos (incluyendo este)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF434C43),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextFormField(
+                                key: _embarazosKey,
+                                validator: _validarEmbarazos,
+                                enabled: !_isSaving,
+                                controller: _embarazosCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  hintText: 'Ej. 2',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        _buildPresionBasalCard(),
+                        const SizedBox(height: 30),
+                        const Text(
+                          '2. Condiciones Previas',
+                          style: TextStyle(
+                            color: Color(0xFF306339),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Poltawski Nowy',
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        ...List.generate(_preguntasBooleanas.length, (index) {
+                          return _buildPreguntaCard(index);
+                        }),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 15),
-                  _buildPresionBasalCard(),
-                  const SizedBox(height: 30),
-                  const Text(
-                    '2. Condiciones Previas',
-                    style: TextStyle(
-                      color: Color(0xFF306339),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Poltawski Nowy',
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  ...List.generate(_preguntasBooleanas.length, (index) {
-                    return _buildPreguntaCard(index);
-                  }),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(20),
-            color: const Color(0xFFFBFFFB),
-            child: SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: _guardarYContinuar,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4C924F),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
                 ),
-                child: _isSaving
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 3,
-                        ),
-                      )
-                    : Text(
-                        widget.esEdicion
-                            ? 'Guardar cambios'
-                            : 'Comenzar a usar la app',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Poltawski Nowy',
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  color: const Color(0xFFFBFFFB),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: _isSaving || _mostrandoResumen
+                          ? null
+                          : _guardarYContinuar,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4C924F),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-              ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : Text(
+                              widget.esEdicion
+                                  ? 'Guardar cambios'
+                                  : 'Comenzar a usar la app',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Poltawski Nowy',
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -453,13 +524,20 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     final bool respondido = _presionBasalDisponible != null;
     final bool esSi = respondido && _presionBasalDisponible == true;
     final bool esNo = respondido && _presionBasalDisponible == false;
+    final error = _validacionActiva && !respondido;
 
     return Container(
+      key: _presionKey,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFB9BAB9), width: 2),
+        border: Border.all(
+          color: error
+              ? Theme.of(context).colorScheme.error
+              : const Color(0xFFB9BAB9),
+          width: 2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,6 +559,16 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
             ),
           ),
           const SizedBox(height: 15),
+          if (error) ...[
+            Text(
+              'Selecciona Sí o No para indicar si conoces tu presión habitual.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               Expanded(
@@ -504,6 +592,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
           if (_presionBasalDisponible == true) ...[
             const SizedBox(height: 18),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Column(
@@ -514,7 +603,15 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 5),
-                      TextField(
+                      TextFormField(
+                        key: _sistolicaKey,
+                        validator: _validarSistolica,
+                        enabled: !_isSaving,
+                        onChanged: (_) {
+                          if (_validacionActiva) {
+                            _diastolicaKey.currentState?.validate();
+                          }
+                        },
                         controller: _sistolicaBasalCtrl,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
@@ -535,7 +632,10 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 5),
-                      TextField(
+                      TextFormField(
+                        key: _diastolicaKey,
+                        validator: _validarDiastolica,
+                        enabled: !_isSaving,
                         controller: _diastolicaBasalCtrl,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
@@ -558,14 +658,21 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     final bool respondido = _respuestas.containsKey(index);
     final bool esSi = respondido && _respuestas[index] == true;
     final bool esNo = respondido && _respuestas[index] == false;
+    final error = _validacionActiva && !respondido;
 
     return Container(
+      key: _preguntaKeys[index],
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFB9BAB9), width: 2),
+        border: Border.all(
+          color: error
+              ? Theme.of(context).colorScheme.error
+              : const Color(0xFFB9BAB9),
+          width: 2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,6 +687,16 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
             ),
           ),
           const SizedBox(height: 15),
+          if (error) ...[
+            Text(
+              'Responde Sí o No a esta condición.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               Expanded(
@@ -612,7 +729,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
     Color fondoNoSeleccionado = Colors.white,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: _isSaving ? null : onTap,
       child: Container(
         height: 45,
         decoration: BoxDecoration(

@@ -1,25 +1,41 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+import { obtenerCsrf, olvidarSesionWeb } from './auth';
+import { apiUrl } from './api_config';
 
 async function requestJson(path, options = {}) {
-  const url = `${API_BASE_URL}${path}`;
+  const url = apiUrl(path);
 
   const response = await fetch(url, {
+    ...options,
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
+      'X-CSRF-Token': obtenerCsrf(),
       ...(options.headers || {}),
     },
-    ...options,
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error HTTP ${response.status}: ${errorText}`);
+    if (response.status === 401) {
+      olvidarSesionWeb();
+      window.location.assign('/');
+    }
+    const data = await response.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error HTTP ${response.status}`);
   }
 
   return response.json();
 }
 
 export const api = {
+  crearVinculacion(id) {
+    return requestJson(`/api/gestantes/${id}/vinculacion`, { method: 'POST' });
+  },
+  asignarProfesional(id, dni) {
+    return requestJson(`/api/gestantes/${id}/acceso/${dni}`, { method: 'PUT' });
+  },
+  retirarProfesional(id, dni) {
+    return requestJson(`/api/gestantes/${id}/acceso/${dni}`, { method: 'DELETE' });
+  },
   getHealth() {
     return requestJson('/health');
   },

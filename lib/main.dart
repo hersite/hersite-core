@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'screens/inicio_screen.dart';
+import 'screens/app_entry_gate.dart';
 //import 'screens/prediccion_screen.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz; // 🟢 IMPORTANTE: Faltaba este import para leer la locación
+import 'package:timezone/timezone.dart'
+    as tz; // 🟢 IMPORTANTE: Faltaba este import para leer la locación
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'services/recordatorio_notificaciones.dart';
 
@@ -18,15 +19,15 @@ void notificationTapBackground(NotificationResponse details) {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // 🟢 CONFIGURACIÓN DE ZONA HORARIA
- tz.initializeTimeZones();
-  final String timeZoneName = 'America/Lima'; 
+  tz.initializeTimeZones();
+  final String timeZoneName = 'America/Lima';
   tz.setLocalLocation(tz.getLocation(timeZoneName));
 
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
-  
+
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
   );
@@ -49,10 +50,51 @@ class MiAppTesis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    final colores = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF4C924F),
+      primary: const Color(0xFF4C924F),
+      onPrimary: Colors.white,
+      secondary: const Color(0xFF306339),
+      surface: const Color(0xFFFBFFFB),
+      onSurface: const Color(0xFF434C43),
+    );
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'App Gestantes',
-      home: InicioPrimer(),
+      theme: ThemeData(
+        colorScheme: colores,
+        fontFamily: 'Poltawski Nowy',
+        scaffoldBackgroundColor: colores.surface,
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          errorMaxLines: 4,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFB9BAB9)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colores.primary, width: 2),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colores.error, width: 2),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: colores.error, width: 2),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            foregroundColor: Colors.white,
+            backgroundColor: colores.primary,
+          ),
+        ),
+      ),
+      home: const AppEntryGate(),
     );
   }
 }

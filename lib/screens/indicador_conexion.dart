@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+import '../services/sync_service.dart';
 
 class IndicadorConexion extends StatefulWidget {
   const IndicadorConexion({super.key});
@@ -60,10 +61,9 @@ class _IndicadorConexionState extends State<IndicadorConexion> {
             size: 14
           ),
           const SizedBox(width: 5),
-          Text(
-            _hayConexion ? 'Sincronizado' : 'Modo offline',
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)
-          ),
+          ValueListenableBuilder<EstadoSync>(valueListenable: SyncService.instance.estado,
+            builder: (_, estado, _) => Text(estado.texto,
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
         ],
       ),
     );

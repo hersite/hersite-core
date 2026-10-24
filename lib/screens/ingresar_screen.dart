@@ -12,10 +12,7 @@ import 'registrar_screen.dart';
 class InicioLogin extends StatefulWidget {
   final bool modoCuentaActiva;
 
-  const InicioLogin({
-    super.key,
-    this.modoCuentaActiva = false,
-  });
+  const InicioLogin({super.key, this.modoCuentaActiva = false});
 
   @override
   State<InicioLogin> createState() => _InicioLoginState();
@@ -53,13 +50,15 @@ class _InicioLoginState extends State<InicioLogin> {
         return;
       }
 
-      final activeProfileId =
-          await SessionStateService.instance.getActiveProfileId();
+      final activeProfileId = await SessionStateService.instance
+          .getActiveProfileId();
 
       PerfilGestante? perfil;
 
       if (activeProfileId != null) {
-        perfil = await LocalDatabase.instance.obtenerPerfilPorId(activeProfileId);
+        perfil = await LocalDatabase.instance.obtenerPerfilPorId(
+          activeProfileId,
+        );
       }
 
       if (!mounted) return;
@@ -104,7 +103,7 @@ class _InicioLoginState extends State<InicioLogin> {
     try {
       final pinIngresado = _pinCtrl.text.trim();
 
-      if (pinIngresado.length != 6) {
+      if (!RegExp(r'^\d{6}$').hasMatch(pinIngresado)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('El PIN debe tener 6 dígitos.'),
@@ -121,7 +120,7 @@ class _InicioLoginState extends State<InicioLogin> {
       } else {
         final dniIngresado = _dniCtrl.text.trim();
 
-        if (dniIngresado.length != 8) {
+        if (!RegExp(r'^\d{8}$').hasMatch(dniIngresado)) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('El DNI debe tener 8 dígitos.'),
@@ -132,6 +131,7 @@ class _InicioLoginState extends State<InicioLogin> {
         }
 
         perfil = await LocalDatabase.instance.obtenerPerfilPorDni(dniIngresado);
+        if (!mounted) return;
 
         if (perfil == null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -169,18 +169,22 @@ class _InicioLoginState extends State<InicioLogin> {
       if (perfilSeguro.pinHash.isEmpty || perfilSeguro.pinSalt.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Esta cuenta no tiene PIN configurado. Registra la cuenta nuevamente.'),
+            content: Text(
+              'Esta cuenta no tiene PIN configurado. Registra la cuenta nuevamente.',
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
         return;
       }
 
-      final pinValido = PinSecurityService.instance.verifyPin(
-        inputPin: pinIngresado,
-        storedHash: perfilSeguro.pinHash,
-        storedSalt: perfilSeguro.pinSalt,
+      final pinValido = await PinSecurityService.instance.verificarConLimite(
+        perfilId: perfilSeguro.id!,
+        pin: pinIngresado,
+        hash: perfilSeguro.pinHash,
+        salt: perfilSeguro.pinSalt,
       );
+      if (!mounted) return;
 
       if (!pinValido) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -192,29 +196,39 @@ class _InicioLoginState extends State<InicioLogin> {
         return;
       }
 
+      if (!perfilSeguro.pinHash.startsWith('pbkdf2_sha256')) {
+        final salt = PinSecurityService.instance.generateSalt();
+        final hash = await PinSecurityService.instance.hashPin(
+          pin: pinIngresado,
+          salt: salt,
+        );
+        await LocalDatabase.instance.actualizarCredencialesPin(
+          perfilSeguro.id!,
+          hash,
+          salt,
+        );
+      }
       await SessionStateService.instance.setActiveProfileId(perfilSeguro.id!);
       await SessionStateService.instance.markSessionActive();
 
-      unawaited(
-        ConnectivitySyncService.instance.trySyncNow(
-          reason: 'inicio de sesión',
-        ),
-      );
+      unawaited(ConnectivitySyncService.instance.start());
 
       if (!mounted) return;
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => const Home(),
-        ),
+        MaterialPageRoute(builder: (context) => const Home()),
       );
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al iniciar sesión: $e'),
+          content: Text(
+            e is StateError
+                ? e.message
+                : 'No se pudo iniciar sesión. Inténtalo nuevamente.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -270,10 +284,7 @@ class _InicioLoginState extends State<InicioLogin> {
                     ),
                   ),
                   child: ClipOval(
-                    child: Image.asset(
-                      'img/logo_tesis.png',
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.asset('img/logo_tesis.png', fit: BoxFit.cover),
                   ),
                 ),
                 const SizedBox(height: 25),
@@ -461,9 +472,8 @@ class _InicioLoginState extends State<InicioLogin> {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const InicioLogin(
-                            modoCuentaActiva: false,
-                          ),
+                          builder: (context) =>
+                              const InicioLogin(modoCuentaActiva: false),
                         ),
                       );
                     },

@@ -24,6 +24,9 @@ class PerfilGestante {
 
   final int presionBasalSistolica;
   final int presionBasalDiastolica;
+  final DateTime? fechaNacimiento;
+  final DateTime? fechaReferenciaGestacion;
+  final String? actualizadoEn;
 
   const PerfilGestante({
     this.id,
@@ -45,6 +48,9 @@ class PerfilGestante {
     required this.antecedenteHemorragia,
     required this.presionBasalSistolica,
     required this.presionBasalDiastolica,
+    this.fechaNacimiento,
+    this.fechaReferenciaGestacion,
+    this.actualizadoEn,
   });
 
   Map<String, dynamic> toMapDb() {
@@ -54,6 +60,11 @@ class PerfilGestante {
       'celular': celular,
       'pin_hash': pinHash,
       'pin_salt': pinSalt,
+      'fecha_nacimiento': fechaNacimiento?.toIso8601String().split('T').first,
+      'fecha_referencia_gestacion': fechaReferenciaGestacion
+          ?.toIso8601String()
+          .split('T')
+          .first,
       'edad_materna': edadMaterna,
       'semanas_gestacion': semanasGestacion,
       'numero_embarazos': numeroEmbarazos,
@@ -78,6 +89,13 @@ class PerfilGestante {
       celular: map['celular'] as String? ?? '',
       pinHash: map['pin_hash'] as String? ?? '',
       pinSalt: map['pin_salt'] as String? ?? '',
+      fechaNacimiento: DateTime.tryParse(
+        map['fecha_nacimiento'] as String? ?? '',
+      ),
+      fechaReferenciaGestacion: DateTime.tryParse(
+        map['fecha_referencia_gestacion'] as String? ?? '',
+      ),
+      actualizadoEn: map['updated_at'] as String?,
       edadMaterna: map['edad_materna'] as int,
       semanasGestacion: map['semanas_gestacion'] as int,
       numeroEmbarazos: map['numero_embarazos'] as int,
@@ -99,8 +117,8 @@ class PerfilGestante {
 
   Map<String, dynamic> toModelInput() {
     return {
-      'Edad_Materna': edadMaterna,
-      'Semanas_Gestacion': semanasGestacion,
+      'Edad_Materna': edadActual,
+      'Semanas_Gestacion': semanasActuales,
       'Numero_Embarazos': numeroEmbarazos,
       'Cesarea_Previa': cesareaPrevia,
       'Diabetes': diabetes,
@@ -126,6 +144,12 @@ class PerfilGestante {
       celular: map['Celular'] as String? ?? '',
       pinHash: map['PinHash'] as String? ?? '',
       pinSalt: map['PinSalt'] as String? ?? '',
+      fechaNacimiento: DateTime.tryParse(
+        map['Fecha_Nacimiento'] as String? ?? '',
+      ),
+      fechaReferenciaGestacion: DateTime.tryParse(
+        map['Fecha_Referencia_Gestacion'] as String? ?? '',
+      ),
       edadMaterna: map['Edad_Materna'] as int,
       semanasGestacion: map['Semanas_Gestacion'] as int,
       numeroEmbarazos: map['Numero_Embarazos'] as int,
@@ -136,15 +160,53 @@ class PerfilGestante {
       anemiaGestacional: map['Anemia_Gestacional'] as int,
 
       // Defaults temporales mientras actualizamos AntecedentesScreen.
-      presionBasalDisponible:
-          map['Presion_Basal_Disponible'] as int? ?? 1,
-      embarazoMultiple:
-          map['Embarazo_Multiple'] as int? ?? 0,
-      antecedenteHemorragia:
-          map['Antecedente_Hemorragia'] as int? ?? 0,
+      presionBasalDisponible: map['Presion_Basal_Disponible'] as int? ?? 1,
+      embarazoMultiple: map['Embarazo_Multiple'] as int? ?? 0,
+      antecedenteHemorragia: map['Antecedente_Hemorragia'] as int? ?? 0,
 
       presionBasalSistolica: map['Presion_Basal_Sistolica'] as int,
       presionBasalDiastolica: map['Presion_Basal_Diastolica'] as int,
     );
   }
+
+  Map<String, dynamic> toDraftMap() => {
+    ...toModelInput(),
+    'Semanas_Gestacion': semanasGestacion,
+    'Fecha_Nacimiento': fechaNacimiento?.toIso8601String(),
+    'Fecha_Referencia_Gestacion': fechaReferenciaGestacion?.toIso8601String(),
+  };
+
+  static DateTime get hoyLima {
+    final now = DateTime.now().toUtc().subtract(const Duration(hours: 5));
+    return DateTime.utc(now.year, now.month, now.day);
+  }
+
+  static DateTime _soloFecha(DateTime fecha) =>
+      DateTime.utc(fecha.year, fecha.month, fecha.day);
+  int get edadActual {
+    if (fechaNacimiento == null) return edadMaterna;
+    final hoy = hoyLima;
+    final fecha = fechaNacimiento!;
+    return hoy.year -
+        fecha.year -
+        ((hoy.month < fecha.month ||
+                (hoy.month == fecha.month && hoy.day < fecha.day))
+            ? 1
+            : 0);
+  }
+
+  int get diasDesdeReferencia => fechaReferenciaGestacion == null
+      ? 0
+      : hoyLima
+            .difference(_soloFecha(fechaReferenciaGestacion!))
+            .inDays
+            .clamp(0, 10000);
+  int get semanasActuales => semanasGestacion + diasDesdeReferencia ~/ 7;
+  DateTime? get fechaProbableParto => fechaReferenciaGestacion == null
+      ? null
+      : _soloFecha(
+          fechaReferenciaGestacion!,
+        ).add(Duration(days: (40 - semanasGestacion) * 7));
+  int? get diasParaParto =>
+      fechaProbableParto?.difference(hoyLima).inDays.clamp(0, 10000);
 }

@@ -10,7 +10,7 @@ import 'antecedentes_screen.dart';
 import 'historial_screen.dart';
 import 'inicio_screen.dart';
 import 'registrar_screen.dart';
-import 'indicador_conexion.dart'; 
+import 'indicador_conexion.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
@@ -54,7 +54,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 
   String _textoPresionBasal(PerfilGestante perfil) {
-    final noRegistrada = perfil.presionBasalDisponible == 0 ||
+    final noRegistrada =
+        perfil.presionBasalDisponible == 0 ||
         perfil.presionBasalSistolica <= 0 ||
         perfil.presionBasalDiastolica <= 0;
 
@@ -129,9 +130,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     // Limpia solo memoria temporal del flujo.
     PerfilGestanteTemp.limpiar();
-    
+
     // 🟢 Reiniciamos la notificación para el próximo login
-Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 2), () {
       Home.notificacionMostradaEnSesion = false;
     });
 
@@ -141,9 +142,7 @@ Future.delayed(const Duration(seconds: 2), () {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (context) => const InicioPrimer(),
-      ),
+      MaterialPageRoute(builder: (context) => const InicioPrimer()),
       (Route<dynamic> route) => false,
     );
   }
@@ -191,9 +190,7 @@ Future.delayed(const Duration(seconds: 2), () {
         backgroundColor: const Color(0xFFFBFFFB),
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-        ),
+        title: Row(mainAxisAlignment: MainAxisAlignment.end),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -262,10 +259,11 @@ Future.delayed(const Duration(seconds: 2), () {
                         child: ElevatedButton(
                           onPressed: () async {
                             await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const InicioRegistrarse(esEdicion: true),
-                            ),
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const InicioRegistrarse(esEdicion: true),
+                              ),
                             );
                             _cargarPerfil();
                           },
@@ -321,14 +319,14 @@ Future.delayed(const Duration(seconds: 2), () {
                               ),
                             ),
                             Text(
-                               'Edad: ${_perfil?.edadMaterna ?? '--'} años',
+                              'Edad: ${_perfil?.edadActual ?? '--'} años',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
-                               ),
+                              ),
                             ),
                             Text(
-                               'Semanas de gestación: ${_perfil?.semanasGestacion ?? '--'}',
+                              'Semanas de gestación: ${_perfil?.semanasActuales ?? '--'}',
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -365,7 +363,7 @@ Future.delayed(const Duration(seconds: 2), () {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  
+
                   // --- RESUMEN DE ANTECEDENTES DINÁMICO ---
                   if (_perfil != null) ...[
                     _buildDatoMedico(
@@ -422,7 +420,8 @@ Future.delayed(const Duration(seconds: 2), () {
                           context,
                           MaterialPageRoute(
                             // SE ENVÍA esEdicion: true PARA QUE LA PANTALLA SE ADAPTE
-                            builder: (context) => const AntecedentesScreen(esEdicion: true),
+                            builder: (context) =>
+                                const AntecedentesScreen(esEdicion: true),
                           ),
                         );
                         _cargarPerfil();
@@ -467,7 +466,7 @@ Future.delayed(const Duration(seconds: 2), () {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                 const Text(
+                  const Text(
                     'SEGURIDAD',
                     style: TextStyle(
                       color: Color(0xFF434C43),
@@ -476,12 +475,12 @@ Future.delayed(const Duration(seconds: 2), () {
                     ),
                   ),
                   const SizedBox(height: 10),
-                 Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Row(
                         children: [
-                           Icon(
+                          Icon(
                             Icons.shield,
                             color: Color(0xFFF9E37F),
                             size: 30,
@@ -503,18 +502,19 @@ Future.delayed(const Duration(seconds: 2), () {
                                 final actualizado = await Navigator.push<bool>(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => CambiarPinScreen(
-                                      perfil: _perfil!,
-                                    ),
+                                    builder: (context) =>
+                                        CambiarPinScreen(perfil: _perfil!),
                                   ),
-                                 );
+                                );
 
                                 if (!mounted) return;
                                 if (actualizado == true) {
                                   await _cargarPerfil();
                                   if (!mounted) return;
 
-                                  _mostrarMensaje('PIN actualizado correctamente.');
+                                  _mostrarMensaje(
+                                    'PIN actualizado correctamente.',
+                                  );
                                 }
                               },
                         child: const Text(
@@ -523,12 +523,12 @@ Future.delayed(const Duration(seconds: 2), () {
                             color: Color(0xFF4C924F),
                             fontWeight: FontWeight.bold,
                           ),
-                         ),
+                        ),
                       ),
                     ],
                   ),
                 ],
-               ),
+              ),
             ),
             const SizedBox(height: 30),
 
@@ -553,7 +553,7 @@ Future.delayed(const Duration(seconds: 2), () {
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Poltawski Nowy',
                   ),
-                 ),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -591,8 +591,14 @@ Future.delayed(const Duration(seconds: 2), () {
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Historial'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Aprende'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite),
+            label: 'Historial',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book),
+            label: 'Aprende',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
         ],
       ),

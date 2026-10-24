@@ -135,7 +135,7 @@ class RecordatorioNotificaciones {
         recordatorio.tipo == TipoRecordatorio.pastilla
             ? 'Recordatorio de pastilla'
             : 'Recordatorio de cita',
-        'Es hora de: ${recordatorio.titulo}',
+        'Tienes un recordatorio de salud. Abre la app para ver los detalles.',
         fecha,
         detalles,
         payload: '$_prefijoPayload${recordatorio.perfilId}:${recordatorio.id}',

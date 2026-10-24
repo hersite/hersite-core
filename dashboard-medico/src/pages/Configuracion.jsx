@@ -11,7 +11,7 @@ import {
   Volume2,
 } from 'lucide-react';
 
-import { obtenerSesionWeb } from '../services/auth';
+import { obtenerSesionWeb, cambiarPinWeb } from '../services/auth';
 
 export default function Configuracion() {
   const [tema, setTema] = useState(localStorage.getItem('theme') || 'claro');
@@ -23,9 +23,9 @@ export default function Configuracion() {
   const [passStatus, setPassStatus] = useState(null);
 
   const sesionActual = obtenerSesionWeb() || { 
-    nombre: 'Dra. Rocio Tordoya', 
-    correo: 'rtordoya@minsa.gob.pe', 
-    rol: 'medico' 
+    nombre: 'Usuario',
+    correo: '',
+    rol: ''
   };
 
   const cambiarTema = (nuevoTema) => {
@@ -47,14 +47,14 @@ export default function Configuracion() {
     localStorage.setItem('polling', polling);
   }, [polling]);
 
-  const handlePasswordSubmit = (e) => {
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     if (!passwords.actual || !passwords.nueva) {
       setPassStatus({ type: 'err', msg: 'Completa todos los campos.' });
       return;
     }
-    if (passwords.nueva.length < 6) {
-      setPassStatus({ type: 'err', msg: 'Mínimo 6 caracteres.' });
+    if (!/^\d{6}$/.test(passwords.nueva) || !/^\d{6}$/.test(passwords.actual)) {
+      setPassStatus({ type: 'err', msg: 'El PIN debe tener exactamente 6 números.' });
       return;
     }
     if (passwords.nueva !== passwords.repetir) {
@@ -62,9 +62,15 @@ export default function Configuracion() {
       return;
     }
 
-    setPassStatus({ type: 'ok', msg: 'Contraseña actualizada correctamente.' });
-    setPasswords({ actual: '', nueva: '', repetir: '' });
-    setTimeout(() => setPassStatus(null), 4000);
+    if (passStatus?.type === 'saving') return;
+    setPassStatus({ type: 'saving', msg: 'Guardando…' });
+    try {
+      await cambiarPinWeb(passwords.actual, passwords.nueva);
+      setPassStatus({ type: 'ok', msg: 'PIN actualizado. Las otras sesiones fueron cerradas.' });
+      setPasswords({ actual: '', nueva: '', repetir: '' });
+    } catch (error) {
+      setPassStatus({ type: 'err', msg: error.message });
+    }
   };
 
   // Función segura para obtener iniciales
@@ -224,7 +230,7 @@ export default function Configuracion() {
                   {/* Input 1 */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                      Contraseña Actual
+                      PIN actual
                     </label>
                     <input
                       type={verPass ? 'text' : 'password'}
@@ -238,11 +244,11 @@ export default function Configuracion() {
                   {/* Input 2 */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                      Nueva Contraseña
+                      Nuevo PIN
                     </label>
                     <input
                       type={verPass ? 'text' : 'password'}
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder="6 números"
                       value={passwords.nueva}
                       onChange={(e) => setPasswords({...passwords, nueva: e.target.value})}
                       className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-3 text-xs font-medium text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-950 transition-all duration-300 placeholder:text-slate-400 dark:placeholder:text-slate-600 shadow-sm"
@@ -252,7 +258,7 @@ export default function Configuracion() {
                   {/* Input 3 */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                      Confirmar Nueva Contraseña
+                      Confirmar nuevo PIN
                     </label>
                     <input
                       type={verPass ? 'text' : 'password'}
@@ -279,7 +285,7 @@ export default function Configuracion() {
                       type="submit"
                       className="rounded-xl bg-emerald-600 dark:bg-emerald-600 px-6 py-3 text-xs font-bold text-white shadow-md transition-all hover:bg-emerald-700 dark:hover:bg-emerald-500 active:scale-[0.98]"
                     >
-                      Actualizar Contraseña
+                      Actualizar PIN
                     </button>
                   </div>
                 </form>

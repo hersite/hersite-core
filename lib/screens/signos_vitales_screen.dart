@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter/foundation.dart';
 import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
@@ -100,15 +99,21 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
       final diastolica = int.tryParse(_diastolicaCtrl.text.trim());
 
       if (sistolica == null || diastolica == null) {
-        throw Exception('Verifica que la presión actual tenga valores numéricos.');
+        throw Exception(
+          'Verifica que la presión actual tenga valores numéricos.',
+        );
       }
 
       if (sistolica < 70 || sistolica > 250) {
-        throw Exception('La presión sistólica actual debe estar entre 70 y 250.');
+        throw Exception(
+          'La presión sistólica actual debe estar entre 70 y 250.',
+        );
       }
 
       if (diastolica < 40 || diastolica > 160) {
-        throw Exception('La presión diastólica actual debe estar entre 40 y 160.');
+        throw Exception(
+          'La presión diastólica actual debe estar entre 40 y 160.',
+        );
       }
 
       if (diastolica >= sistolica) {
@@ -166,10 +171,6 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
     try {
       final formData = await _buildFormData();
 
-      if (kDebugMode) {
-        debugPrint('FORM DATA ENVIADO AL MODELO: $formData');
-      }
-
       final perfilActivo = await LocalDatabase.instance.obtenerPerfil();
 
       if (perfilActivo == null || perfilActivo.id == null) {
@@ -181,7 +182,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
       final resultado = await _model.predictFromMap(formData);
       final sintomasDetectados = _obtenerSintomasDetectados();
 
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final idLocal = const Uuid().v4();
 
       final evaluacion = EvaluacionRiesgo(
@@ -254,10 +255,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
- 
-        ),
+        title: Row(mainAxisAlignment: MainAxisAlignment.end),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),

@@ -1,3 +1,5 @@
+import { probabilidadesModelo } from '../utils/probabilidades';
+import { esAdminWeb } from '../services/auth';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { AlertTriangle, Search, CheckCircle2, RefreshCw, UserCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
@@ -15,7 +17,7 @@ export default function Dashboard() {
 
   const isDark = localStorage.getItem('theme') === 'oscuro';
   const alertedCases = useRef(new Set());
-  const isAdmin = localStorage.getItem('rol') === 'admin' || localStorage.getItem('role') === 'admin';
+  const isAdmin = esAdminWeb();
 
   const getRiskColors = (riskClass) => {
     if (riskClass === 'danger')
@@ -52,19 +54,10 @@ export default function Dashboard() {
 
   const getProbabilidad = (detalle, evalBase) => {
     const nivel = detalle?.nivel_riesgo || evalBase?.nivel_riesgo;
-    const probs = detalle?.probabilidades || evalBase?.probabilidades;
-
-    if (Array.isArray(probs) && Array.isArray(probs[0])) {
-      const valores = probs[0];
-      const index = getRiskClass(nivel) === 'danger' ? 2 : getRiskClass(nivel) === 'warn' ? 1 : 0;
-      const prob = valores[index];
-      if (typeof prob === 'number') return Math.round(prob * 100);
-    }
-
-    if (getRiskClass(nivel) === 'danger') return 90;
-    if (getRiskClass(nivel) === 'warn') return 55;
-    if (getRiskClass(nivel) === 'ok') return 10;
-    return 0;
+    const probs = probabilidadesModelo(detalle?.probabilidades ?? evalBase?.probabilidades);
+    if (!probs) return null;
+    const index = nivel === 'Riesgo_Alto' ? 2 : nivel === 'Riesgo_Medio' ? 1 : 0;
+    return Math.round(probs[index] * 100);
   };
 
   const leerNumero = (data, campo) => {
@@ -489,7 +482,7 @@ export default function Dashboard() {
                   {evalActiva && (
                     <div className="mt-3 sm:mt-0 sm:ml-auto text-center shrink-0">
                       <div className={`text-3xl sm:text-4xl font-black ${riskClass === 'danger' ? 'text-red-500 dark:text-red-400' : riskClass === 'warn' ? 'text-amber-500 dark:text-amber-400' : 'text-green-600 dark:text-green-500'}`}>
-                        {probabilidad}%
+                        {probabilidad === null ? "No disponible" : `${probabilidad}%`}
                       </div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Prob. clase</div>
                     </div>

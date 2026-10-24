@@ -27,13 +27,13 @@ class LocalDatabase {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'riesgo_materno_local.db');
 
-    final password =
-        await DatabaseKeyService.instance.getOrCreateDatabasePassword();
+    final password = await DatabaseKeyService.instance
+        .getOrCreateDatabasePassword();
 
     return openDatabase(
       path,
       password: password,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -65,6 +65,8 @@ class LocalDatabase {
         celular TEXT NOT NULL DEFAULT '',
         pin_hash TEXT NOT NULL DEFAULT '',
         pin_salt TEXT NOT NULL DEFAULT '',
+        fecha_nacimiento TEXT,
+        fecha_referencia_gestacion TEXT,
         edad_materna INTEGER NOT NULL,
         semanas_gestacion INTEGER NOT NULL,
         numero_embarazos INTEGER NOT NULL,
@@ -108,6 +110,7 @@ class LocalDatabase {
       CREATE INDEX idx_evaluaciones_perfil_fecha
       ON evaluaciones(perfil_id, fecha_hora DESC)
     ''');
+    await _crearTablaSync(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -158,13 +161,9 @@ class LocalDatabase {
       if (perfiles.isNotEmpty) {
         final primerPerfilId = perfiles.first['id'] as int;
 
-        await db.update(
-          'evaluaciones',
-          {
-            'perfil_id': primerPerfilId,
-          },
-          where: 'perfil_id IS NULL OR perfil_id = 0',
-        );
+        await db.update('evaluaciones', {
+          'perfil_id': primerPerfilId,
+        }, where: 'perfil_id IS NULL OR perfil_id = 0');
       }
 
       await db.execute('''
@@ -232,17 +231,42 @@ class LocalDatabase {
 
       // Si en algún registro antiguo la presión basal estuviera como -1,
       // entonces marcamos correctamente que la presión basal no está disponible.
-      await db.rawUpdate(
-        '''
+      await db.rawUpdate('''
         UPDATE perfil_gestante
         SET presion_basal_disponible = 0
         WHERE presion_basal_sistolica = -1
           OR presion_basal_diastolica = -1
-        ''',
-      );
+        ''');
     }
 
+    if (oldVersion < 6) {
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'perfil_gestante',
+        columnName: 'fecha_nacimiento',
+        definition: 'TEXT',
+      );
+      await _addColumnIfNotExists(
+        db,
+        tableName: 'perfil_gestante',
+        columnName: 'fecha_referencia_gestacion',
+        definition: 'TEXT',
+      );
+      // La referencia propia usa la fecha de su último registro, no una preferencia compartida.
+      await db.execute(
+        "UPDATE perfil_gestante SET fecha_referencia_gestacion = substr(updated_at, 1, 10) WHERE fecha_referencia_gestacion IS NULL",
+      );
+      await _crearTablaSync(db);
+      await db.execute(
+        "INSERT OR IGNORE INTO perfil_sync (perfil_id, revision) SELECT id, updated_at FROM perfil_gestante",
+      );
+    }
+  }
 
+  Future<void> _crearTablaSync(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS perfil_sync (perfil_id INTEGER PRIMARY KEY, revision TEXT NOT NULL, error TEXT, FOREIGN KEY(perfil_id) REFERENCES perfil_gestante(id) ON DELETE CASCADE)',
+    );
   }
 
   Future<void> _addColumnIfNotExists(
@@ -281,11 +305,7 @@ class LocalDatabase {
   Future<bool> existeAlgunaCuentaLocal() async {
     final db = await database;
 
-    final rows = await db.query(
-      'perfil_gestante',
-      columns: ['id'],
-      limit: 1,
-    );
+    final rows = await db.query('perfil_gestante', columns: ['id'], limit: 1);
 
     return rows.isNotEmpty;
   }
@@ -325,8 +345,8 @@ class LocalDatabase {
   }
 
   Future<PerfilGestante?> obtenerPerfilActivo() async {
-    final activeProfileId =
-        await SessionStateService.instance.getActiveProfileId();
+    final activeProfileId = await SessionStateService.instance
+        .getActiveProfileId();
 
     if (activeProfileId == null) {
       return null;
@@ -341,40 +361,74 @@ class LocalDatabase {
 
   Future<int> guardarOActualizarPerfil(PerfilGestante perfil) async {
     final db = await database;
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
+    return db.transaction((txn) async {
+      final data = {...perfil.toMapDb(), 'updated_at': now};
+      int id;
+      if (perfil.id != null) {
+        id = perfil.id!;
+        if (await txn.update(
+              'perfil_gestante',
+              data,
+              where: 'id = ?',
+              whereArgs: [id],
+            ) !=
+            1) {
+          throw StateError('No se encontró la cuenta.');
+        }
+      } else {
+        id = await txn.insert('perfil_gestante', {...data, 'created_at': now});
+      }
+      await txn.insert('perfil_sync', {
+        'perfil_id': id,
+        'revision': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      return id;
+    });
+  }
 
-    final data = {
-      ...perfil.toMapDb(),
-      'updated_at': now,
-    };
-
-    if (perfil.id != null) {
-      await db.update(
-        'perfil_gestante',
-        data,
-        where: 'id = ?',
-        whereArgs: [perfil.id],
-      );
-
-      return perfil.id!;
-    }
-
-    final existente = await obtenerPerfilPorDni(perfil.dni);
-
-    if (existente != null) {
-      throw Exception('Ya existe una cuenta local registrada con este DNI.');
-    }
-
-    final nuevoId = await db.insert(
+  Future<void> actualizarCredencialesPin(
+    int id,
+    String hash,
+    String salt,
+  ) async {
+    final db = await database;
+    await db.update(
       'perfil_gestante',
-      {
-        ...data,
-        'created_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.abort,
+      {'pin_hash': hash, 'pin_salt': salt},
+      where: 'id = ?',
+      whereArgs: [id],
     );
+  }
 
-    return nuevoId;
+  Future<bool> perfilPendiente(int id) async => (await (await database).query(
+    'perfil_sync',
+    where: 'perfil_id = ?',
+    whereArgs: [id],
+  )).isNotEmpty;
+  Future<void> confirmarPerfilSincronizado(int id, String revision) async {
+    await (await database).delete(
+      'perfil_sync',
+      where: 'perfil_id = ? AND revision = ?',
+      whereArgs: [id, revision],
+    );
+  }
+
+  Future<void> registrarErrorPerfil(int id, String error) async {
+    await (await database).update(
+      'perfil_sync',
+      {'error': error},
+      where: 'perfil_id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> contarPendientes(int id) async {
+    final rows = await (await database).rawQuery(
+      "SELECT (SELECT COUNT(*) FROM evaluaciones WHERE perfil_id = ? AND sync_status = 'pendiente') + (SELECT COUNT(*) FROM perfil_sync WHERE perfil_id = ?) AS total",
+      [id, id],
+    );
+    return rows.first['total'] as int;
   }
 
   // ============================================================
@@ -405,7 +459,9 @@ class LocalDatabase {
     return listarEvaluacionesPorPerfil(perfil.id!);
   }
 
-  Future<List<EvaluacionRiesgo>> listarEvaluacionesPorPerfil(int perfilId) async {
+  Future<List<EvaluacionRiesgo>> listarEvaluacionesPorPerfil(
+    int perfilId,
+  ) async {
     final db = await database;
 
     final rows = await db.query(
@@ -431,19 +487,23 @@ class LocalDatabase {
     return rows.map((row) => EvaluacionRiesgo.fromMapDb(row)).toList();
   }
 
-  Future<List<EvaluacionRiesgo>> listarEvaluacionesPendientesDelPerfilActivo() async {
+  Future<List<EvaluacionRiesgo>>
+  listarEvaluacionesPendientesDelPerfilActivo() async {
     final perfil = await obtenerPerfilActivo();
 
     if (perfil == null || perfil.id == null) {
       return [];
     }
+    return listarEvaluacionesPendientesPorPerfil(perfil.id!);
+  }
 
-    final db = await database;
-
-    final rows = await db.query(
+  Future<List<EvaluacionRiesgo>> listarEvaluacionesPendientesPorPerfil(
+    int perfilId,
+  ) async {
+    final rows = await (await database).query(
       'evaluaciones',
       where: 'perfil_id = ? AND sync_status = ?',
-      whereArgs: [perfil.id!, 'pendiente'],
+      whereArgs: [perfilId, 'pendiente'],
       orderBy: 'fecha_hora ASC',
     );
 
@@ -495,12 +555,7 @@ class LocalDatabase {
           last_sync_error = NULL
       WHERE id_local = ?
       ''',
-      [
-        'sincronizado',
-        serverId,
-        now,
-        idLocal,
-      ],
+      ['sincronizado', serverId, now, idLocal],
     );
   }
 
@@ -518,11 +573,7 @@ class LocalDatabase {
           last_sync_error = ?
       WHERE id_local = ?
       ''',
-      [
-        'pendiente',
-        error,
-        idLocal,
-      ],
+      ['pendiente', error, idLocal],
     );
   }
 

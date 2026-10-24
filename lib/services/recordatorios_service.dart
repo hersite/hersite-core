@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/local_database.dart';
@@ -56,6 +57,7 @@ class RecordatoriosService {
     notificaciones: RecordatorioNotificaciones.instance,
   );
 
+  static const _storage = FlutterSecureStorage();
   static const _prefijo = 'recordatorios_perfil_';
   static const _contador = 'recordatorios_siguiente_id';
   final Future<int?> Function() obtenerPerfilActivo;
@@ -85,8 +87,9 @@ class RecordatoriosService {
     }
   }
 
-  List<Recordatorio> _leer(SharedPreferences prefs, int perfil) {
-    final contenido = prefs.getString('$_prefijo$perfil');
+  Future<List<Recordatorio>> _leer(SharedPreferences prefs, int perfil) async {
+    final key = '$_prefijo$perfil';
+    final contenido = await _storage.read(key: key) ?? prefs.getString(key);
     if (contenido == null) return [];
     final registros = (jsonDecode(contenido) as List)
         .map(
@@ -99,6 +102,14 @@ class RecordatoriosService {
         'No se pudieron verificar los recordatorios de esta cuenta.',
       );
     }
+    // Migración verificada: se elimina el texto plano solo después de escribirlo cifrado.
+    await _storage.write(key: key, value: contenido);
+    if (await _storage.read(key: key) != contenido) {
+      throw StateError(
+        'No se pudo proteger el recordatorio. El original se conserva.',
+      );
+    }
+    await prefs.remove(key);
     registros.sort(
       (a, b) => a.proximaFecha(reloj()).compareTo(b.proximaFecha(reloj())),
     );
@@ -111,15 +122,13 @@ class RecordatoriosService {
     List<Recordatorio> registros,
   ) async {
     await _verificarPerfil(perfil);
-    final guardado = await prefs.setString(
-      '$_prefijo$perfil',
-      jsonEncode(registros.map((r) => r.toJson()).toList()),
-    );
-    if (!guardado) {
-      throw StateError(
-        'No se pudieron guardar los recordatorios. Intenta nuevamente.',
-      );
+    final key = '$_prefijo$perfil';
+    final value = jsonEncode(registros.map((r) => r.toJson()).toList());
+    await _storage.write(key: key, value: value);
+    if (await _storage.read(key: key) != value) {
+      throw StateError('No se pudieron guardar los recordatorios.');
     }
+    await prefs.remove(key);
   }
 
   Future<int> _nuevoId(SharedPreferences prefs) async {
@@ -136,7 +145,7 @@ class RecordatoriosService {
 
   Future<List<Recordatorio>> listar() => _serial(() async {
     final perfil = await _perfil();
-    return _leer(await SharedPreferences.getInstance(), perfil);
+    return await _leer(await SharedPreferences.getInstance(), perfil);
   });
 
   Future<Recordatorio> _activar(Recordatorio registro, EstadoAviso modo) async {
@@ -186,7 +195,7 @@ class RecordatoriosService {
       throw ArgumentError('Elige una fecha y hora futuras.');
     }
     final prefs = await SharedPreferences.getInstance();
-    final registros = _leer(prefs, perfil);
+    final registros = await _leer(prefs, perfil);
     var nuevo = Recordatorio(
       id: await _nuevoId(prefs),
       perfilId: perfil,
@@ -212,7 +221,7 @@ class RecordatoriosService {
   }) => _serial(() async {
     final perfil = await _perfil();
     final prefs = await SharedPreferences.getInstance();
-    final registros = _leer(prefs, perfil);
+    final registros = await _leer(prefs, perfil);
     final indice = registros.indexWhere((r) => r.id == id);
     if (indice < 0) {
       throw StateError('No se encontró este recordatorio en tu cuenta.');
@@ -241,21 +250,38 @@ class RecordatoriosService {
     return registros[indice];
   });
 
-  List<RecordatorioAnterior> _anteriores(SharedPreferences prefs) {
+  Future<List<RecordatorioAnterior>> _anteriores(
+    SharedPreferences prefs,
+  ) async {
     final importados = <String>{};
-    for (final clave in prefs.getKeys().where((k) => k.startsWith(_prefijo))) {
+    for (final clave in {
+      ...prefs.getKeys(),
+      ...(await _storage.readAll()).keys,
+    }.where((k) => k.startsWith(_prefijo))) {
       final perfil = int.tryParse(clave.substring(_prefijo.length));
       if (perfil != null) {
         importados.addAll(
-          _leer(prefs, perfil).map((r) => r.claveAnterior).whereType<String>(),
+          (await _leer(
+            prefs,
+            perfil,
+          )).map((r) => r.claveAnterior).whereType<String>(),
         );
       }
     }
     final resultado = <RecordatorioAnterior>[];
     for (final tipo in TipoRecordatorio.values) {
-      final contenido = prefs.getString(
-        tipo == TipoRecordatorio.pastilla ? 'mis_pastillas' : 'mis_citas',
-      );
+      final legacyKey = tipo == TipoRecordatorio.pastilla
+          ? 'mis_pastillas'
+          : 'mis_citas';
+      final contenido =
+          await _storage.read(key: legacyKey) ?? prefs.getString(legacyKey);
+      if (contenido != null) {
+        await _storage.write(key: legacyKey, value: contenido);
+        if (await _storage.read(key: legacyKey) != contenido) {
+          throw StateError('No se pudo proteger el registro anterior.');
+        }
+        await prefs.remove(legacyKey);
+      }
       if (contenido == null || contenido.isEmpty) continue;
       List<dynamic> filas;
       try {
@@ -286,7 +312,7 @@ class RecordatoriosService {
 
   Future<List<RecordatorioAnterior>> anterioresSinCuenta() => _serial(() async {
     await _perfil();
-    return _anteriores(await SharedPreferences.getInstance());
+    return await _anteriores(await SharedPreferences.getInstance());
   });
 
   Future<void> _importar(
@@ -294,10 +320,10 @@ class RecordatoriosService {
     int perfil,
     Set<String> claves,
   ) async {
-    final registros = _leer(prefs, perfil);
-    for (final anterior in _anteriores(
+    final registros = await _leer(prefs, perfil);
+    for (final anterior in (await _anteriores(
       prefs,
-    ).where((r) => claves.contains(r.clave))) {
+    )).where((r) => claves.contains(r.clave))) {
       registros.add(
         Recordatorio(
           id: await _nuevoId(prefs),
@@ -325,7 +351,7 @@ class RecordatoriosService {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('recordatorios_avisos_anteriores_cancelados') != true) {
       // Las alarmas antiguas no tienen propietario. Se recuperan con IDs nuevos.
-      for (final anterior in _anteriores(prefs)) {
+      for (final anterior in await _anteriores(prefs)) {
         final id = anterior.datos['id'];
         if (id is int) await notificaciones.cancelar(id);
       }
@@ -334,7 +360,7 @@ class RecordatoriosService {
     final perfiles = await obtenerPerfilesLocales();
     if (perfiles.length == 1 && perfiles.single == perfil) {
       final validos = <String>{};
-      for (final anterior in _anteriores(prefs)) {
+      for (final anterior in await _anteriores(prefs)) {
         try {
           anterior.fechaHora;
           validos.add(anterior.clave);
@@ -348,15 +374,19 @@ class RecordatoriosService {
       await notificaciones.cancelarTodos();
       await prefs.setInt('recordatorios_perfil_avisos', perfil);
     }
-    final registros = _leer(prefs, perfil);
+    final registros = await _leer(prefs, perfil);
     if (registros.isEmpty) return registros;
+    final clavePrivacidad = 'recordatorios_avisos_genericos_$perfil';
+    final protegerAvisos = prefs.getBool(clavePrivacidad) != true;
     final modo = await notificaciones.disponibilidad(
       solicitarPermisos: solicitarPermisos,
     );
     final pendientes = await notificaciones.pendientes();
     final actualizados = <Recordatorio>[];
     for (final registro in registros) {
-      if (registro.completado ||
+      if (protegerAvisos) await notificaciones.cancelar(registro.id);
+      if (protegerAvisos ||
+          registro.completado ||
           registro.estaVencido(reloj()) ||
           !pendientes.contains(registro.id) ||
           registro.estadoAviso != modo) {
@@ -366,6 +396,7 @@ class RecordatoriosService {
       }
     }
     await _escribir(prefs, perfil, actualizados);
+    if (protegerAvisos) await prefs.setBool(clavePrivacidad, true);
     return actualizados;
   });
 }
