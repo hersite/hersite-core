@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 enum TipoRecordatorio { pastilla, cita }
 
@@ -17,6 +18,7 @@ class Recordatorio {
     this.completado = false,
     this.estadoAviso = EstadoAviso.pendiente,
     this.claveAnterior,
+    this.respaldoId,
   });
 
   final int id;
@@ -30,6 +32,7 @@ class Recordatorio {
   final bool completado;
   final EstadoAviso estadoAviso;
   final String? claveAnterior;
+  final String? respaldoId;
 
   bool get esDiario => repeticion == RepeticionRecordatorio.diaria;
   bool get requiereAtencion =>
@@ -69,6 +72,7 @@ class Recordatorio {
     completado: completado ?? this.completado,
     estadoAviso: estadoAviso ?? this.estadoAviso,
     claveAnterior: claveAnterior,
+    respaldoId: respaldoId,
   );
 
   Map<String, dynamic> toJson() => {
@@ -81,6 +85,7 @@ class Recordatorio {
     'completado': completado,
     'estado_aviso': estadoAviso.name,
     'clave_anterior': claveAnterior,
+    'respaldo_id': respaldoId,
   };
 
   factory Recordatorio.fromJson(Map<String, dynamic> json) => Recordatorio(
@@ -97,6 +102,7 @@ class Recordatorio {
       json['estado_aviso'] as String? ?? 'pendiente',
     ),
     claveAnterior: json['clave_anterior'] as String?,
+    respaldoId: json['respaldo_id'] as String? ?? const Uuid().v4(),
   );
 
   static DateTime leerFechaAnterior(String fecha, String hora) {

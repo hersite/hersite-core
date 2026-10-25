@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'screens/app_entry_gate.dart';
-//import 'screens/prediccion_screen.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart'
     as tz; // 🟢 IMPORTANTE: Faltaba este import para leer la locación
@@ -26,7 +25,7 @@ Future<void> main() async {
   tz.setLocalLocation(tz.getLocation(timeZoneName));
 
   const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
+      AndroidInitializationSettings('@drawable/ic_notificacion_salud');
 
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
@@ -60,7 +59,7 @@ class MiAppTesis extends StatelessWidget {
     );
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'App Gestantes',
+      title: 'Nuvia',
       theme: ThemeData(
         colorScheme: colores,
         fontFamily: 'Poltawski Nowy',

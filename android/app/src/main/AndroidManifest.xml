@@ -8,9 +8,13 @@
     <application
 
 
-        android:label="hersite_core"
+        android:label="Nuvia"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"

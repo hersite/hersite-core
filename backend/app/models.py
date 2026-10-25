@@ -32,6 +32,8 @@ class Gestante(SQLModel, table=True):
     fecha_referencia_gestacion: Optional[str] = None
     actualizado_en: Optional[str] = None
     sync_key_hash: Optional[str] = None
+    recovery_pin_hash: Optional[str] = None
+    recovery_pin_salt: Optional[str] = None
 
 class EvaluacionCentral(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -73,6 +75,19 @@ class PersonalSalud(SQLModel, table=True):
     pin: str  # Hash PBKDF2; nunca se devuelve al cliente.
     rol: str = Field(default="medico") # Puede ser "medico" o "admin"
     activo: bool = True
+
+
+class RespaldoRecordatorios(SQLModel, table=True):
+    gestante_id: int = Field(primary_key=True, foreign_key="gestante.id")
+    version: int = 0
+    registros: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+
+
+class RecuperacionMovil(SQLModel, table=True):
+    token_hash: str = Field(primary_key=True)
+    gestante_id: int = Field(foreign_key="gestante.id", index=True)
+    expira_en: int
+    key_hash: Optional[str] = None
 
 
 class SesionWeb(SQLModel, table=True):

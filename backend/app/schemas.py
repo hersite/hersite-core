@@ -152,10 +152,58 @@ class CambiarPinPayload(BaseModel):
     nueva: Pin
 
 
+class VerificadorPin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    hash: str = Field(pattern=r"^pbkdf2_sha256\$600000\$[A-Za-z0-9_-]{43}=$")
+    salt: str = Field(pattern=r"^[A-Za-z0-9_-]{43}=$")
+
+
 class RegistroMovilPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     perfil: PerfilPayload
     sync_key: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
     codigo_vinculacion: str | None = Field(default=None, min_length=20, max_length=100)
+    recovery_pin: VerificadorPin | None = None
+
+
+class RecuperarCuentaPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dni: Dni
+    pin: Pin
+
+
+class ConfirmarRecuperacionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    sync_key: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+
+
+class CambiarPinMovilPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    actual: Pin
+    nuevo: VerificadorPin
+
+
+class RecordatorioRespaldo(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    respaldo_id: UUID
+    tipo: Literal["pastilla", "cita"]
+    titulo: str = Field(min_length=1, max_length=150)
+    fecha_hora: datetime
+    repeticion: Literal["unaVez", "diaria"]
+    completado: bool = Field(strict=True)
+
+
+class RespaldoRecordatoriosPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_version: int = Field(strict=True, ge=0)
+    registros: list[RecordatorioRespaldo] = Field(max_length=2000)
+
+    @model_validator(mode="after")
+    def claves_unicas(self):
+        if len({r.respaldo_id for r in self.registros}) != len(self.registros):
+            raise ValueError("Hay recordatorios repetidos.")
+        return self
 
 
 class EvaluacionResponse(BaseModel):

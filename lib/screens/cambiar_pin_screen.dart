@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
 import '../services/pin_security_service.dart';
+import '../services/api_client.dart';
 
 class CambiarPinScreen extends StatefulWidget {
   final PerfilGestante perfil;
@@ -97,6 +98,12 @@ class _CambiarPinScreenState extends State<CambiarPinScreen> {
         salt: nuevoSalt,
       );
 
+      await ApiClient.instance.cambiarPin(
+        widget.perfil.id!,
+        pinActual,
+        nuevoHash,
+        nuevoSalt,
+      );
       await LocalDatabase.instance.actualizarCredencialesPin(
         widget.perfil.id!,
         nuevoHash,
@@ -150,7 +157,7 @@ class _CambiarPinScreenState extends State<CambiarPinScreen> {
                   border: Border.all(color: const Color(0xFF4C924F)),
                 ),
                 child: const Text(
-                  'Para cambiar tu PIN, primero ingresa el PIN actual y luego registra uno nuevo de 6 dígitos.',
+                  'Escribe tu PIN actual y el nuevo PIN de 6 números. Necesitas conexión a internet para cambiarlo.',
                   style: TextStyle(
                     color: Color(0xFF306339),
                     fontSize: 13,

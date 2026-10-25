@@ -30,7 +30,8 @@ def create_db_and_tables() -> None:
     # Actualización aditiva de instalaciones existentes: no elimina registros.
     additions = {
         "gestante": {"fecha_nacimiento": "TEXT", "fecha_referencia_gestacion": "TEXT",
-                     "actualizado_en": "TEXT", "sync_key_hash": "TEXT"},
+                     "actualizado_en": "TEXT", "sync_key_hash": "TEXT",
+                     "recovery_pin_hash": "TEXT", "recovery_pin_salt": "TEXT"},
         "evaluacioncentral": {"recibido_en": "TEXT"},
     }
     with engine.begin() as connection:

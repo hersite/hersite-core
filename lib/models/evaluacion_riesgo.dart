@@ -56,7 +56,8 @@ class EvaluacionRiesgo {
       idLocal: map['id_local'] as String,
       perfilId: map['perfil_id'] as int? ?? 0,
       fechaHora: map['fecha_hora'] as String,
-      formData: jsonDecode(map['form_data_json'] as String) as Map<String, dynamic>,
+      formData:
+          jsonDecode(map['form_data_json'] as String) as Map<String, dynamic>,
       sintomasDetectados: List<String>.from(
         jsonDecode(map['sintomas_detectados_json'] as String),
       ),
@@ -66,6 +67,10 @@ class EvaluacionRiesgo {
           ? null
           : jsonDecode(map['probabilidades_json'] as String),
       syncStatus: map['sync_status'] as String,
+      serverId: map['server_id'] as String?,
+      syncedAt: map['synced_at'] as String?,
+      syncAttempts: map['sync_attempts'] as int? ?? 0,
+      lastSyncError: map['last_sync_error'] as String?,
     );
   }
 

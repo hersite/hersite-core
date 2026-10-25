@@ -10,7 +10,6 @@ import 'antecedentes_screen.dart';
 import 'historial_screen.dart';
 import 'inicio_screen.dart';
 import 'registrar_screen.dart';
-import 'indicador_conexion.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});

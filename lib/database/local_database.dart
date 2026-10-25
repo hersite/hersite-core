@@ -401,6 +401,101 @@ class LocalDatabase {
     );
   }
 
+  /// Recupera solo el DNI autenticado, sin borrar evaluaciones pendientes.
+  Future<int> restaurarCuenta(
+    Map<String, dynamic> remoto,
+    List<dynamic> evaluaciones, {
+    required String hash,
+    required String salt,
+  }) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final now = DateTime.now().toUtc().toIso8601String();
+      final existentes = await txn.query(
+        'perfil_gestante',
+        where: 'dni = ?',
+        whereArgs: [remoto['dni']],
+        limit: 1,
+      );
+      final data = <String, Object?>{
+        for (final key in [
+          'nombre',
+          'dni',
+          'celular',
+          'edad_materna',
+          'semanas_gestacion',
+          'numero_embarazos',
+          'cesarea_previa',
+          'diabetes',
+          'hipertension_previa',
+          'preeclampsia_previa',
+          'anemia_gestacional',
+          'presion_basal_disponible',
+          'embarazo_multiple',
+          'antecedente_hemorragia',
+          'presion_basal_sistolica',
+          'presion_basal_diastolica',
+          'fecha_nacimiento',
+          'fecha_referencia_gestacion',
+        ])
+          key: remoto[key],
+        'pin_hash': hash,
+        'pin_salt': salt,
+        'updated_at': remoto['actualizado_en'] ?? now,
+      };
+      final int id;
+      if (existentes.isEmpty) {
+        id = await txn.insert('perfil_gestante', {...data, 'created_at': now});
+      } else {
+        id = existentes.first['id'] as int;
+        await txn.update(
+          'perfil_gestante',
+          data,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+      // El perfil central fue revisado y elegido; no se vuelve a subir como nuevo.
+      await txn.delete('perfil_sync', where: 'perfil_id = ?', whereArgs: [id]);
+      for (final raw in evaluaciones) {
+        final row = Map<String, dynamic>.from(raw as Map);
+        final local = await txn.query(
+          'evaluaciones',
+          columns: ['perfil_id'],
+          where: 'id_local = ?',
+          whereArgs: [row['id_local']],
+          limit: 1,
+        );
+        if (local.isNotEmpty && local.first['perfil_id'] != id) {
+          throw StateError(
+            'No pudimos recuperar tu historial. Tus datos siguen guardados.',
+          );
+        }
+        final evaluation = EvaluacionRiesgo(
+          idLocal: row['id_local'] as String,
+          perfilId: id,
+          fechaHora: row['fecha_hora'] as String,
+          formData: Map<String, dynamic>.from(row['form_data'] as Map),
+          sintomasDetectados: List<String>.from(
+            row['sintomas_detectados'] as List,
+          ),
+          nivelRiesgo: row['nivel_riesgo'] as String,
+          mensaje: row['mensaje'] as String,
+          probabilidades: row['probabilidades'],
+          syncStatus: 'sincronizado',
+          serverId: row['server_id'] as String,
+          syncedAt: now,
+        );
+        await txn.insert(
+          'evaluaciones',
+          evaluation.toMapDb(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      return id;
+    });
+  }
+
   Future<bool> perfilPendiente(int id) async => (await (await database).query(
     'perfil_sync',
     where: 'perfil_id = ?',

@@ -8,6 +8,8 @@ import '../services/session_state_service.dart';
 import '../services/connectivity_sync_service.dart';
 import 'home_screen.dart';
 import 'registrar_screen.dart';
+import 'recuperar_cuenta_screen.dart';
+import '../widgets/app_logo.dart';
 
 class InicioLogin extends StatefulWidget {
   final bool modoCuentaActiva;
@@ -136,7 +138,9 @@ class _InicioLoginState extends State<InicioLogin> {
         if (perfil == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('No existe una cuenta local con ese DNI.'),
+              content: Text(
+                'Para traer tu cuenta a este teléfono, pulsa «Recuperar mi cuenta».',
+              ),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -273,20 +277,7 @@ class _InicioLoginState extends State<InicioLogin> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF316533),
-                      width: 2,
-                    ),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset('img/logo_tesis.png', fit: BoxFit.cover),
-                  ),
-                ),
+                const AppLogo(),
                 const SizedBox(height: 25),
 
                 Text(
@@ -433,6 +424,23 @@ class _InicioLoginState extends State<InicioLogin> {
                 ),
 
                 const SizedBox(height: 20),
+
+                TextButton.icon(
+                  onPressed: _iniciandoSesion
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RecuperarCuentaScreen(
+                              dni: _usarCuentaActiva
+                                  ? _perfilActivo?.dni
+                                  : null,
+                            ),
+                          ),
+                        ),
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Recuperar mi cuenta'),
+                ),
 
                 if (!_usarCuentaActiva)
                   Row(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/guia_app_dialog.dart';
 
 import '../data/perfil_gestante_temp.dart';
 import '../database/local_database.dart';
@@ -269,6 +270,7 @@ class _AntecedentesScreenState extends State<AntecedentesScreen> {
       final perfilId = await LocalDatabase.instance.guardarOActualizarPerfil(
         perfil,
       );
+      if (!widget.esEdicion) await GuiaApp.preparar(perfilId);
       await SessionStateService.instance.setActiveProfileId(perfilId);
       await SessionStateService.instance.markSessionActive();
       unawaited(ConnectivitySyncService.instance.start());

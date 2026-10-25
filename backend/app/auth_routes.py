@@ -1,15 +1,21 @@
 import hmac
+import hashlib
+import base64
 import re
 import secrets
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import AccesoGestante, Gestante, PersonalSalud, SesionWeb, VinculacionMovil
-from app.schemas import CambiarPinPayload, LoginPayload, RegistroMovilPayload
+from app.models import (AccesoGestante, Gestante, PersonalSalud, SesionWeb, VinculacionMovil,
+                        EvaluacionCentral, RespaldoRecordatorios, RecuperacionMovil)
+from app.schemas import (CambiarPinPayload, LoginPayload, RegistroMovilPayload, PerfilPayload,
+                         RecuperarCuentaPayload, ConfirmarRecuperacionPayload,
+                         CambiarPinMovilPayload, RespaldoRecordatoriosPayload)
 from app.security import (COOKIE_NAME, SESSION_SECONDS, check_attempt, clear_attempt, current_user,
                           digest, failed_attempt, hash_password, require_admin, secure_cookie,
                           verify_password)
@@ -99,7 +105,7 @@ def mobile_patient(request: Request, session: Session = Depends(get_session)) ->
     key = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
     if not re.fullmatch(r"[0-9]{8}", dni) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", key):
         raise HTTPException(401, "La cuenta no está vinculada para sincronizar.")
-    patient = session.exec(select(Gestante).where(Gestante.dni == dni)).first()
+    patient = session.exec(select(Gestante).where(Gestante.dni == dni).with_for_update()).first()
     if not patient or not patient.sync_key_hash or not hmac.compare_digest(patient.sync_key_hash, digest(key)):
         raise HTTPException(401, "La cuenta no está vinculada para sincronizar.")
     return patient
@@ -108,8 +114,13 @@ def mobile_patient(request: Request, session: Session = Depends(get_session)) ->
 @router.post("/api/mobile/registro")
 def mobile_register(payload: RegistroMovilPayload, request: Request, session: Session = Depends(get_session)):
     rate_key = f"enroll:{request.client.host if request.client else 'unknown'}"
-    patient = session.exec(select(Gestante).where(Gestante.dni == payload.perfil.dni)).first()
+    patient = session.exec(select(Gestante).where(Gestante.dni == payload.perfil.dni).with_for_update()).first()
     if patient and patient.sync_key_hash and hmac.compare_digest(patient.sync_key_hash, digest(payload.sync_key)):
+        if payload.recovery_pin and not patient.recovery_pin_hash:
+            patient.recovery_pin_hash = payload.recovery_pin.hash
+            patient.recovery_pin_salt = payload.recovery_pin.salt
+            session.add(patient)
+            session.commit()
         return {"ok": True, "server_id": str(patient.id), "message": "Cuenta vinculada."}
     check_attempt(session, rate_key)
     if patient:
@@ -117,12 +128,15 @@ def mobile_register(payload: RegistroMovilPayload, request: Request, session: Se
         if not code or code.gestante_id != patient.id or code.expira_en <= int(time.time()):
             if payload.codigo_vinculacion:
                 failed_attempt(session, rate_key)
-            raise HTTPException(409, "Esta cuenta central necesita un código de vinculación del administrador.")
+            raise HTTPException(409, "Escribe el PIN que usabas antes para recuperar tu cuenta.")
         session.delete(code)
         patient.sync_key_hash = digest(payload.sync_key)
     else:
         values = payload.perfil.model_dump(mode="json")
         patient = Gestante(**values, sync_key_hash=digest(payload.sync_key))
+    if payload.recovery_pin and not patient.recovery_pin_hash:
+        patient.recovery_pin_hash = payload.recovery_pin.hash
+        patient.recovery_pin_salt = payload.recovery_pin.salt
     session.add(patient)
     try:
         session.commit()
@@ -130,6 +144,132 @@ def mobile_register(payload: RegistroMovilPayload, request: Request, session: Se
         session.rollback()
         raise HTTPException(409, "El perfil ya fue registrado. Vuelve a intentar la vinculación.")
     return {"ok": True, "server_id": str(patient.id), "message": "Cuenta vinculada."}
+
+
+def _verify_mobile_pin(pin: str, patient: Gestante | None) -> bool:
+    # Igual derivación que Flutter. El PIN nunca se conserva ni se devuelve.
+    salt = patient.recovery_pin_salt if patient and patient.recovery_pin_salt else "0" * 44
+    actual = base64.urlsafe_b64encode(hashlib.pbkdf2_hmac(
+        "sha256", pin.encode(), salt.encode(), 600_000)).decode()
+    stored = patient.recovery_pin_hash if patient and patient.recovery_pin_hash else ""
+    return hmac.compare_digest(f"pbkdf2_sha256$600000${actual}", stored)
+
+
+def _account_snapshot(patient: Gestante, session: Session) -> dict:
+    # Lista explícita: nunca incluir claves, hashes o datos de otras pacientes.
+    profile = {key: getattr(patient, key) for key in PerfilPayload.model_fields}
+    evaluations = session.exec(select(EvaluacionCentral).where(
+        EvaluacionCentral.gestante_id == patient.id).order_by(EvaluacionCentral.fecha_hora.desc())).all()
+    backup = session.get(RespaldoRecordatorios, patient.id)
+    return {"ok": True, "perfil": profile, "evaluaciones": [
+        {key: getattr(row, key) for key in (
+            "id_local", "server_id", "fecha_hora", "form_data", "sintomas_detectados",
+            "nivel_riesgo", "mensaje", "probabilidades")}
+        for row in evaluations],
+        "recordatorios": {"version": backup.version if backup else 0,
+                           "registros": backup.registros if backup else []}}
+
+
+@router.post("/api/mobile/recuperar")
+def recover_account(payload: RecuperarCuentaPayload, request: Request, response: Response,
+                    session: Session = Depends(get_session)):
+    keys = [f"recover-account:{payload.dni}",
+            f"recover-ip:{request.client.host if request.client else 'unknown'}"]
+    for key in keys:
+        check_attempt(session, key)
+    patient = session.exec(select(Gestante).where(Gestante.dni == payload.dni).with_for_update()).first()
+    # Revisa otra vez después de adquirir el bloqueo, por intentos concurrentes.
+    for key in keys:
+        check_attempt(session, key)
+    if not _verify_mobile_pin(payload.pin, patient):
+        for key in keys:
+            failed_attempt(session, key)
+        # Misma respuesta si el DNI no existe, falta habilitarlo o el PIN es incorrecto.
+        raise HTTPException(401, "Revisa tu DNI y el PIN que usabas antes.")
+    from app.models import IntentoAcceso
+    for key in keys:
+        attempt = session.get(IntentoAcceso, digest(key))
+        if attempt:
+            session.delete(attempt)
+    for expired in session.exec(select(RecuperacionMovil).where(
+            RecuperacionMovil.gestante_id == patient.id,
+            RecuperacionMovil.expira_en <= int(time.time()))).all():
+        session.delete(expired)
+    token = secrets.token_urlsafe(32)
+    session.add(RecuperacionMovil(token_hash=digest(token), gestante_id=patient.id,
+                                 expira_en=int(time.time()) + 600))
+    session.commit()
+    response.headers["Cache-Control"] = "no-store"
+    return {**_account_snapshot(patient, session), "token": token}
+
+
+@router.post("/api/mobile/confirmar-recuperacion")
+def confirm_recovery(payload: ConfirmarRecuperacionPayload, response: Response,
+                     session: Session = Depends(get_session)):
+    ticket = session.get(RecuperacionMovil, digest(payload.token))
+    if not ticket or ticket.expira_en <= int(time.time()):
+        raise HTTPException(401, "Vuelve a escribir tu DNI y PIN para recuperar tu cuenta.")
+    patient = session.exec(select(Gestante).where(
+        Gestante.id == ticket.gestante_id).with_for_update()).one()
+    # Mantiene el mismo orden de bloqueos que el cambio de PIN.
+    session.expire(ticket)
+    ticket = session.exec(select(RecuperacionMovil).where(
+        RecuperacionMovil.token_hash == digest(payload.token)).with_for_update()).first()
+    if not ticket or ticket.expira_en <= int(time.time()):
+        raise HTTPException(401, "Vuelve a escribir tu DNI y PIN para recuperar tu cuenta.")
+    new_hash = digest(payload.sync_key)
+    if ticket.key_hash and (ticket.key_hash != new_hash or patient.sync_key_hash != new_hash):
+        raise HTTPException(401, "Vuelve a recuperar tu cuenta.")
+    ticket.key_hash = new_hash
+    patient.sync_key_hash = new_hash
+    session.add(patient)
+    session.add(ticket)
+    session.commit()
+    response.headers["Cache-Control"] = "no-store"
+    return _account_snapshot(patient, session)
+
+
+@router.post("/api/mobile/cambiar-pin")
+def change_mobile_pin(payload: CambiarPinMovilPayload, patient: Gestante = Depends(mobile_patient),
+                      session: Session = Depends(get_session)):
+    key = f"mobile-pin:{patient.id}"
+    check_attempt(session, key)
+    if not _verify_mobile_pin(payload.actual, patient):
+        failed_attempt(session, key)
+        raise HTTPException(401, "El PIN actual no es correcto.")
+    patient.recovery_pin_hash = payload.nuevo.hash
+    patient.recovery_pin_salt = payload.nuevo.salt
+    session.add(patient)
+    # Un cambio de PIN invalida autorizaciones de recuperación anteriores.
+    for ticket in session.exec(select(RecuperacionMovil).where(
+            RecuperacionMovil.gestante_id == patient.id)).all():
+        session.delete(ticket)
+    session.commit()
+    clear_attempt(session, key)
+    return {"ok": True, "message": "Tu PIN se cambió."}
+
+
+@router.post("/api/mobile/recordatorios")
+def backup_reminders(payload: RespaldoRecordatoriosPayload, patient: Gestante = Depends(mobile_patient),
+                     session: Session = Depends(get_session)):
+    # Serializa por paciente también la primera copia (cuando aún no existe fila).
+    session.exec(select(Gestante).where(Gestante.id == patient.id).with_for_update()).one()
+    backup = session.get(RespaldoRecordatorios, patient.id)
+    records = [r.model_dump(mode="json") for r in payload.registros]
+    records.sort(key=lambda r: r["respaldo_id"])
+    if backup and backup.registros == records:
+        return {"ok": True, "version": backup.version}
+    if payload.base_version != (backup.version if backup else 0):
+        return JSONResponse(status_code=409, content={
+            "ok": False, "version": backup.version if backup else 0,
+            "detail": "No pudimos guardar la copia. Volveremos a intentarlo.",
+        })
+    backup = backup or RespaldoRecordatorios(gestante_id=patient.id)
+    backup.version += 1
+    backup.registros = records
+    session.add(backup)
+    session.commit()
+    return {"ok": True, "version": backup.version}
 
 
 @router.post("/api/gestantes/{patient_id}/vinculacion")

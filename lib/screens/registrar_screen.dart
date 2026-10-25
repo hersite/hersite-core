@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_logo.dart';
 import 'dart:async';
 
 import '../data/perfil_gestante_temp.dart';
@@ -303,18 +304,7 @@ class _InicioRegistrarseState extends State<InicioRegistrarse> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: Colors.white,
-                      child: ClipOval(
-                        child: Image.asset(
-                          'img/logo_tesis.png',
-                          width: 68,
-                          height: 68,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
+                    const AppLogo(size: 72),
                   ],
                 ),
                 const SizedBox(height: 24),

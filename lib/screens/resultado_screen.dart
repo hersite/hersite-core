@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'historial_screen.dart'; // SE AGREGA EL IMPORT DEL HISTORIAL
 import 'package:url_launcher/url_launcher.dart';
-import 'indicador_conexion.dart'; // NUEVO IMPORT AÑADIDO
 import 'home_screen.dart'; // NUEVO IMPORT AÑADIDO
 
 class ResultadoScreen extends StatelessWidget {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../database/local_database.dart';
 import 'api_client.dart';
 import 'session_state_service.dart';
+import 'recordatorios_service.dart';
 
 enum FaseSync { comprobando, desconectado, pendiente, enviando, alDia, error }
 
@@ -11,8 +12,8 @@ class EstadoSync {
   final String? detalle;
   const EstadoSync(this.fase, {this.pendientes = 0, this.detalle});
   String get texto => switch (fase) {
-    FaseSync.comprobando => 'Comprobando conexión',
-    FaseSync.desconectado => 'Sin conexión al servidor',
+    FaseSync.comprobando => 'Comprobando internet',
+    FaseSync.desconectado => 'Modo sin internet',
     FaseSync.pendiente => '$pendientes registro(s) pendiente(s)',
     FaseSync.enviando => 'Sincronizando…',
     FaseSync.alDia => 'Sincronizado',
@@ -42,6 +43,10 @@ class SyncService {
     try {
       if (!vigente()) return 0;
       estado.value = const EstadoSync(FaseSync.enviando);
+      // Habilita recuperación también para cuentas anteriores sin perfil pendiente.
+      final cuenta = await _api.vincularPerfil(id);
+      if (!cuenta.ok) throw StateError(cuenta.message);
+      if (!vigente()) return 0;
       if (await LocalDatabase.instance.perfilPendiente(id)) {
         final perfil = await LocalDatabase.instance.obtenerPerfilPorId(id);
         if (perfil == null || !vigente()) return 0;
@@ -81,6 +86,20 @@ class SyncService {
           );
         }
       }
+      if (vigente()) {
+        final copia = await RecordatoriosService.instance.prepararRespaldo(id);
+        if (copia != null) {
+          final result = await _api.respaldarRecordatorios(id, copia);
+          if (!result.ok) throw StateError(result.message);
+          if (vigente()) {
+            await RecordatoriosService.instance.confirmarRespaldo(
+              id,
+              result.data['version'] as int,
+              copia['registros'] as List,
+            );
+          }
+        }
+      }
     } catch (failure) {
       huboErrores = true;
       error = failure is StateError
@@ -90,15 +109,17 @@ class SyncService {
       _sincronizando = false;
       if (vigente()) {
         final pendientes = await LocalDatabase.instance.contarPendientes(id);
-        estado.value = EstadoSync(
-          huboErrores
-              ? FaseSync.error
-              : pendientes == 0
-              ? FaseSync.alDia
-              : FaseSync.pendiente,
-          pendientes: pendientes,
-          detalle: error,
-        );
+        if (vigente()) {
+          estado.value = EstadoSync(
+            huboErrores
+                ? FaseSync.error
+                : pendientes == 0
+                ? FaseSync.alDia
+                : FaseSync.pendiente,
+            pendientes: pendientes,
+            detalle: error,
+          );
+        }
       }
     }
     return enviadas;

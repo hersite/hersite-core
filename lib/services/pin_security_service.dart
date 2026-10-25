@@ -112,4 +112,7 @@ class PinSecurityService {
 
     return result == 0;
   }
+
+  Future<void> limpiarIntentos(int id) =>
+      _storage.delete(key: 'pin_attempts_$id');
 }

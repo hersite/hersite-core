@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -16,11 +17,13 @@ class ApiSyncResponse {
   final String serverId;
   final String message;
   final int statusCode;
+  final Map<String, dynamic> data;
   const ApiSyncResponse({
     required this.ok,
     required this.serverId,
     required this.message,
     this.statusCode = 0,
+    this.data = const {},
   });
 }
 
@@ -30,6 +33,7 @@ class ApiClient {
   final http.Client _client;
   final _storage = const FlutterSecureStorage();
   final _claves = <int, Future<String>>{};
+  final requiereRecuperacion = ValueNotifier<int?>(null);
 
   Map<String, dynamic> _perfilPayload(PerfilGestante perfil) => {
     ...(perfil.toMapDb()
@@ -59,14 +63,36 @@ class ApiClient {
   }
 
   Future<String> _leerOCrearClave(int id) async {
-    final origin = sha256.convert(utf8.encode(ApiConfig.baseUrl)).toString();
-    final key = 'sync_key_${origin}_$id';
+    final key = _claveStorage(id);
     var secret = await _storage.read(key: key);
     if (secret == null) {
       secret = PinSecurityService.instance.generateSalt().replaceAll('=', '');
       await _storage.write(key: key, value: secret);
     }
     return secret;
+  }
+
+  String _claveStorage(int id) =>
+      'sync_key_${sha256.convert(utf8.encode(ApiConfig.baseUrl))}_$id';
+
+  Future<void> guardarClaveRecuperada(int id, String secret) async {
+    // Espera cualquier creación anterior para que no sobrescriba la clave nueva.
+    final anterior = _claves[id];
+    if (anterior != null) {
+      try {
+        await anterior;
+      } catch (_) {
+        /* Se reemplaza por la recuperada. */
+      }
+    }
+    await _storage.write(key: _claveStorage(id), value: secret);
+    if (await _storage.read(key: _claveStorage(id)) != secret) {
+      throw StateError(
+        'No pudimos guardar tu cuenta en este teléfono. Inténtalo otra vez.',
+      );
+    }
+    _claves[id] = Future.value(secret);
+    requiereRecuperacion.value = null;
   }
 
   Future<ApiSyncResponse> _post(
@@ -97,12 +123,15 @@ class ApiClient {
         ok: ok,
         serverId: '${body['server_id'] ?? ''}',
         statusCode: response.statusCode,
+        data: Map<String, dynamic>.from(body),
         message: ok
             ? '${body['message'] ?? 'Recibido'}'
             : detail is String
             ? detail
             : response.statusCode == 422
-            ? 'El servidor rechazó datos incompletos o inválidos. Revisa tu perfil.'
+            ? 'Revisa que tus datos estén completos.'
+            : response.statusCode == 429
+            ? 'Has intentado varias veces. Espera 15 minutos y vuelve a intentar.'
             : 'No se pudo enviar el registro.',
       );
     } catch (error) {
@@ -111,7 +140,7 @@ class ApiClient {
         serverId: '',
         message: error is StateError
             ? error.message
-            : 'No se pudo conectar con el servidor. Los datos siguen guardados en el teléfono.',
+            : 'No pudimos conectar. Tus datos siguen guardados en este teléfono.',
       );
     }
   }
@@ -138,11 +167,92 @@ class ApiClient {
     if (perfil == null) throw StateError('No se encontró la cuenta.');
     final secret = await _clave(perfilId);
     await _verificarCuenta(perfilId, generation);
-    return _post('/api/mobile/registro', {
+    final result = await _post('/api/mobile/registro', {
       'perfil': _perfilPayload(perfil),
       'sync_key': secret,
+      if (perfil.pinHash.startsWith('pbkdf2_sha256\$600000\$'))
+        'recovery_pin': {'hash': perfil.pinHash, 'salt': perfil.pinSalt},
       if (codigo != null) 'codigo_vinculacion': codigo.trim(),
     });
+    await _verificarCuenta(perfilId, generation);
+    if (result.statusCode == 409 && result.message.contains('PIN')) {
+      requiereRecuperacion.value = perfilId;
+    } else if (result.ok && requiereRecuperacion.value == perfilId) {
+      requiereRecuperacion.value = null;
+    }
+    return result;
+  }
+
+  Future<ApiSyncResponse> solicitarRecuperacion(String dni, String pin) =>
+      _post('/api/mobile/recuperar', {'dni': dni, 'pin': pin});
+
+  Future<ApiSyncResponse> confirmarRecuperacion(String token, String secret) =>
+      _post('/api/mobile/confirmar-recuperacion', {
+        'token': token,
+        'sync_key': secret,
+      });
+
+  Future<ApiSyncResponse> respaldarRecordatorios(
+    int id,
+    Map<String, dynamic> copia,
+  ) async {
+    final generation = SessionStateService.instance.generation;
+    final perfil = await LocalDatabase.instance.obtenerPerfilPorId(id);
+    final secret = await _clave(id);
+    await _verificarCuenta(id, generation);
+    final headers = {
+      'Authorization': 'Bearer $secret',
+      'X-Profile-DNI': perfil!.dni,
+    };
+    var result = await _post(
+      '/api/mobile/recordatorios',
+      copia,
+      headers: headers,
+    );
+    if (result.statusCode == 409 && result.data['version'] is int) {
+      // Un corte puede perder la confirmación de la copia anterior. Solo hay un
+      // teléfono autorizado y SyncService serializa las copias: reintenta una vez
+      // con la revisión que confirmó el servicio, sin pedir recuperar la cuenta.
+      await _verificarCuenta(id, generation);
+      result = await _post('/api/mobile/recordatorios', {
+        ...copia,
+        'base_version': result.data['version'],
+      }, headers: headers);
+    }
+    return result;
+  }
+
+  Future<void> cambiarPin(
+    int id,
+    String actual,
+    String hash,
+    String salt,
+  ) async {
+    final generation = SessionStateService.instance.generation;
+    final linked = await vincularPerfil(id);
+    if (!linked.ok) throw StateError(linked.message);
+    final perfil = await LocalDatabase.instance.obtenerPerfilPorId(id);
+    final secret = await _clave(id);
+    await _verificarCuenta(id, generation);
+    final result = await _post(
+      '/api/mobile/cambiar-pin',
+      {
+        'actual': actual,
+        'nuevo': {'hash': hash, 'salt': salt},
+      },
+      headers: {
+        'Authorization': 'Bearer $secret',
+        'X-Profile-DNI': perfil!.dni,
+      },
+    );
+    await _verificarCuenta(id, generation);
+    if (!result.ok) {
+      throw StateError(
+        result.statusCode == 0
+            ? 'Conéctate a internet para cambiar tu PIN.'
+            : result.message,
+      );
+    }
   }
 
   Future<ApiSyncResponse> enviarPerfil(PerfilGestante perfil) async {

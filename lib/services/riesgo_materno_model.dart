@@ -7,15 +7,6 @@ class RiesgoMaternoModel {
   Map<String, dynamic>? _metadata;
   bool _loaded = false;
 
-  // Getter para verificar si ya cargó
-  bool get isLoaded => _loaded;
-
-  // Getter inteligente para obtener el orden exacto de las 27 variables del JSON
-  List<String> get featureNamesOrden {
-    if (_metadata == null) return [];
-    return List<String>.from(_metadata!['feature_names_orden'] ?? []);
-  }
-
   Future<void> load() async {
     if (_loaded) return;
 
@@ -33,7 +24,6 @@ class RiesgoMaternoModel {
 
     _validarMetadata(_metadata!);
 
-
     _loaded = true;
   }
 
@@ -48,7 +38,9 @@ class RiesgoMaternoModel {
 
     for (final key in requiredKeys) {
       if (!metadata.containsKey(key) || metadata[key] == null) {
-        throw Exception('El archivo de metadata no contiene la clave requerida: $key');
+        throw Exception(
+          'El archivo de metadata no contiene la clave requerida: $key',
+        );
       }
     }
 
@@ -63,34 +55,10 @@ class RiesgoMaternoModel {
     }
   }
 
-  Future<Map<String, dynamic>> predictFromTestFile() async {
-    if (!_loaded) {
-      throw Exception('Primero debes cargar el modelo con load().');
-    }
-
-    final testString = await rootBundle.loadString(
-      'assets/ml/caso_prueba_flutter.json',
-    );
-
-    final testData = jsonDecode(testString) as Map<String, dynamic>;
-
-    final inputVector = (testData['input_vector'] as List)
-        .map((e) => (e as num).toDouble())
-        .toList();
-
-    final resultado = await predictFromVector(inputVector);
-
-    final esperadoPython = testData['prediccion_clase'] as String;
-
-    return {
-      ...resultado,
-      'esperado_python': esperadoPython,
-      'coincide': resultado['nivel_riesgo'] == esperadoPython,
-    };
-  }
-
   // NUEVA FUNCIÓN: Traduce un mapa del formulario al vector ordenado del modelo
-  Future<Map<String, dynamic>> predictFromMap(Map<String, dynamic> formData) async {
+  Future<Map<String, dynamic>> predictFromMap(
+    Map<String, dynamic> formData,
+  ) async {
     if (!_loaded) await load();
 
     final metadata = _metadata;
@@ -111,13 +79,17 @@ class RiesgoMaternoModel {
         return value.toDouble();
       }
 
-      throw Exception('El campo $featureName debe ser numérico. Valor recibido: $value');
+      throw Exception(
+        'El campo $featureName debe ser numérico. Valor recibido: $value',
+      );
     }).toList();
 
     return predictFromVector(inputVector);
   }
 
-  Future<Map<String, dynamic>> predictFromVector(List<double> inputVector) async {
+  Future<Map<String, dynamic>> predictFromVector(
+    List<double> inputVector,
+  ) async {
     final session = _session;
     final metadata = _metadata;
 
@@ -144,17 +116,15 @@ class RiesgoMaternoModel {
       );
     }
 
-    final inputTensor = await OrtValue.fromList(
-      inputVector,
-      [1, inputVector.length],
-    );
+    final inputTensor = await OrtValue.fromList(inputVector, [
+      1,
+      inputVector.length,
+    ]);
 
     dynamic outputs;
 
     try {
-      final inputs = {
-        inputName: inputTensor,
-      };
+      final inputs = {inputName: inputTensor};
 
       outputs = await session.run(inputs);
 
@@ -252,7 +222,6 @@ class RiesgoMaternoModel {
       'Formato de probabilidades no reconocido. Valor recibido: $probaRaw',
     );
   }
-
 
   String _mensajePorRiesgo(String riesgo) {
     switch (riesgo) {

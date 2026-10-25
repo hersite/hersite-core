@@ -125,7 +125,7 @@ class RecordatorioNotificaciones {
         channelDescription: 'Avisos de pastillas y citas médicas',
         importance: Importance.high,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_notificacion_salud',
         visibility: NotificationVisibility.private,
       ),
     );

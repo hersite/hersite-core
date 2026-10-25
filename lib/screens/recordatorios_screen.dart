@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../services/connectivity_sync_service.dart';
 import 'package:intl/intl.dart';
 
 import '../models/recordatorio.dart';
@@ -16,7 +18,6 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen>
   static const _verde = Color(0xFF306339);
   late final RecordatoriosService _service;
   List<Recordatorio> _registros = [];
-  List<RecordatorioAnterior> _anteriores = [];
   String _filtro = 'Pendientes';
   bool _cargando = true;
   bool _ocupado = false;
@@ -47,11 +48,9 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen>
     final registros = await _service.restaurar(
       solicitarPermisos: solicitarPermisos,
     );
-    final anteriores = await _service.anterioresSinCuenta();
     if (!mounted) return;
     setState(() {
       _registros = registros;
-      _anteriores = anteriores;
       _error = null;
     });
   }
@@ -102,6 +101,11 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen>
     try {
       await accion();
       await _leerDatos();
+      unawaited(
+        ConnectivitySyncService.instance.trySyncNow(
+          reason: 'recordatorio guardado',
+        ),
+      );
     } on ArgumentError catch (error) {
       _mensaje(error.message.toString(), advertencia: true);
     } catch (_) {
@@ -261,20 +265,6 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen>
     );
   });
 
-  Future<void> _recuperarAnteriores() async {
-    final claves = await showDialog<Set<String>>(
-      context: context,
-      builder: (_) => _ImportarAnteriores(anteriores: _anteriores),
-    );
-    if (claves == null || claves.isEmpty || !mounted) return;
-    await _ejecutar(() async {
-      await _service.importarAnteriores(claves);
-      _mensaje(
-        'Recordatorios recuperados para tu cuenta. Los vencidos necesitan una nueva fecha.',
-      );
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final ahora = _service.reloj();
@@ -352,30 +342,6 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen>
                               )
                               .toList(),
                         ),
-                        if (_anteriores.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Hay recordatorios de una versión anterior sin cuenta asociada.',
-                                  ),
-                                  TextButton(
-                                    onPressed: _ocupado
-                                        ? null
-                                        : _recuperarAnteriores,
-                                    child: const Text(
-                                      'Revisar y recuperar los míos',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
                         if (_registros.any(
                           (r) =>
                               !r.completado &&
@@ -792,76 +758,5 @@ class _FormularioRecordatorioState extends State<_FormularioRecordatorio> {
         ],
       ),
     ),
-  );
-}
-
-class _ImportarAnteriores extends StatefulWidget {
-  const _ImportarAnteriores({required this.anteriores});
-  final List<RecordatorioAnterior> anteriores;
-  @override
-  State<_ImportarAnteriores> createState() => _ImportarAnterioresState();
-}
-
-class _ImportarAnterioresState extends State<_ImportarAnteriores> {
-  final _seleccionados = <String>{};
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Recuperar mis recordatorios'),
-    content: SizedBox(
-      width: 400,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Selecciona solo los que te pertenecen. Se guardarán en tu cuenta; los originales se conservarán.',
-          ),
-          const SizedBox(height: 12),
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              children: widget.anteriores.map((anterior) {
-                String? fecha;
-                try {
-                  fecha = DateFormat(
-                    'dd/MM/yyyy HH:mm',
-                  ).format(anterior.fechaHora);
-                } catch (_) {
-                  /* El original no se elimina si su fecha no se reconoce. */
-                }
-                return CheckboxListTile(
-                  title: Text(anterior.titulo),
-                  subtitle: Text(
-                    fecha ??
-                        'Fecha u hora no reconocida. Conserva el original y crea un nuevo recordatorio.',
-                  ),
-                  value: _seleccionados.contains(anterior.clave),
-                  onChanged: fecha == null
-                      ? null
-                      : (valor) => setState(() {
-                          if (valor == true) {
-                            _seleccionados.add(anterior.clave);
-                          } else {
-                            _seleccionados.remove(anterior.clave);
-                          }
-                        }),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancelar'),
-      ),
-      FilledButton(
-        onPressed: _seleccionados.isEmpty
-            ? null
-            : () => Navigator.pop(context, _seleccionados),
-        child: const Text('Recuperar'),
-      ),
-    ],
   );
 }

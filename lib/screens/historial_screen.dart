@@ -4,13 +4,10 @@ import '../database/local_database.dart';
 import '../models/evaluacion_riesgo.dart';
 import '../services/sync_service.dart';
 import '../services/connectivity_sync_service.dart';
-import '../services/api_client.dart';
-import '../services/session_state_service.dart';
 import 'home_screen.dart';
 import 'aprende_screen.dart';
 import 'perfil_screen.dart';
 import 'detalle_evaluacion_screen.dart';
-import 'indicador_conexion.dart';
 
 class HistorialScreen extends StatefulWidget {
   const HistorialScreen({super.key});
@@ -94,65 +91,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
   }
 
   // --- LÓGICA DE COLORES SEGÚN TU DISEÑO ---
-  Future<void> _vincularCuenta() async {
-    final ctrl = TextEditingController();
-    final code = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Vincular con el servidor'),
-        content: TextField(
-          controller: ctrl,
-          autocorrect: false,
-          decoration: const InputDecoration(
-            labelText: 'Código entregado por el administrador',
-            helperText: 'Es de un solo uso y dura 10 minutos.',
-            helperMaxLines: 3,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Vincular'),
-          ),
-        ],
-      ),
-    );
-    // El campo puede seguir montado durante la animación de cierre del diálogo.
-    if (code == null || code.isEmpty || !mounted) return;
-    final id = await SessionStateService.instance.getActiveProfileId();
-    if (id == null) return;
-    try {
-      final result = await ApiClient.instance.vincularPerfil(id, codigo: code);
-      if (!result.ok) throw StateError(result.message);
-      await ConnectivitySyncService.instance.trySyncNow(
-        reason: 'cuenta vinculada',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cuenta vinculada. Se enviarán los registros pendientes.',
-          ),
-        ),
-      );
-      await _refrescarEvaluaciones();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error is StateError
-                ? error.message
-                : 'No se pudo vincular la cuenta.',
-          ),
-        ),
-      );
-    }
-  }
 
   Map<String, dynamic> _obtenerEstiloPorRiesgo(String nivelRiesgo) {
     if (nivelRiesgo == 'Riesgo_Alto') {
@@ -220,7 +158,20 @@ class _HistorialScreenState extends State<HistorialScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFFBFFFB),
         elevation: 0,
-        automaticallyImplyLeading: false, // Pantalla jefa, sin flecha de atrás
+        leading: IconButton(
+          tooltip: 'Volver',
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF306339)),
+          onPressed: () {
+            final navigator = Navigator.of(context);
+            if (navigator.canPop()) {
+              navigator.pop();
+            } else {
+              navigator.pushReplacement(
+                MaterialPageRoute(builder: (_) => const Home()),
+              );
+            }
+          },
+        ),
         title: const Row(mainAxisAlignment: MainAxisAlignment.end),
       ),
       body: FutureBuilder<List<EvaluacionRiesgo>>(
@@ -397,14 +348,6 @@ class _HistorialScreenState extends State<HistorialScreen> {
               ),
               const SizedBox(height: 12),
 
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _vincularCuenta,
-                  icon: const Icon(Icons.link),
-                  label: const Text('Vincular cuenta existente'),
-                ),
-              ),
               // BARRA DE FILTROS
               _buildFiltros(),
 

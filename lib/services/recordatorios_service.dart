@@ -4,11 +4,13 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../database/local_database.dart';
 import '../models/recordatorio.dart';
 import 'recordatorio_notificaciones.dart';
 import 'session_state_service.dart';
+import 'api_config.dart';
 
 class RecordatorioAnterior {
   const RecordatorioAnterior({
@@ -103,8 +105,9 @@ class RecordatoriosService {
       );
     }
     // Migración verificada: se elimina el texto plano solo después de escribirlo cifrado.
-    await _storage.write(key: key, value: contenido);
-    if (await _storage.read(key: key) != contenido) {
+    final actualizado = jsonEncode(registros.map((r) => r.toJson()).toList());
+    await _storage.write(key: key, value: actualizado);
+    if (await _storage.read(key: key) != actualizado) {
       throw StateError(
         'No se pudo proteger el recordatorio. El original se conserva.',
       );
@@ -203,6 +206,7 @@ class RecordatoriosService {
       titulo: nombre,
       fechaHora: fecha,
       repeticion: repeticion,
+      respaldoId: const Uuid().v4(),
     );
     // El dato se conserva aunque se rechacen permisos o falle la alarma.
     registros.add(nuevo);
@@ -313,6 +317,110 @@ class RecordatoriosService {
   Future<List<RecordatorioAnterior>> anterioresSinCuenta() => _serial(() async {
     await _perfil();
     return await _anteriores(await SharedPreferences.getInstance());
+  });
+
+  String _respaldoKey(int perfil) =>
+      'respaldo_recordatorios_${sha256.convert(utf8.encode(ApiConfig.baseUrl))}_$perfil';
+
+  Map<String, dynamic> _datosRespaldo(Recordatorio r) => {
+    'respaldo_id': r.respaldoId,
+    'tipo': r.tipo.name,
+    'titulo': r.titulo,
+    'fecha_hora': r.fechaHora.toIso8601String(),
+    'repeticion': r.repeticion.name,
+    'completado': r.completado,
+  };
+
+  Future<Map<String, dynamic>?> prepararRespaldo(int perfil) => _serial(
+    () async {
+      await _verificarPerfil(perfil);
+      final registros =
+          (await _leer(
+            await SharedPreferences.getInstance(),
+            perfil,
+          )).map(_datosRespaldo).toList()..sort(
+            (a, b) => (a['respaldo_id'] as String).compareTo(
+              b['respaldo_id'] as String,
+            ),
+          );
+      final raw = await _storage.read(key: _respaldoKey(perfil));
+      final anterior = raw == null
+          ? <String, dynamic>{}
+          : jsonDecode(raw) as Map<String, dynamic>;
+      final firma = jsonEncode(registros);
+      if (anterior['firma'] == firma) return null;
+      return {'base_version': anterior['version'] ?? 0, 'registros': registros};
+    },
+  );
+
+  Future<void> confirmarRespaldo(
+    int perfil,
+    int version,
+    List<dynamic> registros,
+  ) => _serial(() async {
+    await _storage.write(
+      key: _respaldoKey(perfil),
+      value: jsonEncode({
+        'version': version,
+        'firma': jsonEncode(registros),
+        'ids': registros.map((r) => r['respaldo_id']).toList(),
+      }),
+    );
+  });
+
+  Future<void> restaurarRespaldo(
+    int perfil,
+    Map<String, dynamic> copia,
+  ) => _serial(() async {
+    await _verificarPerfil(perfil);
+    final prefs = await SharedPreferences.getInstance();
+    final locales = await _leer(prefs, perfil);
+    final meta = await _storage.read(key: _respaldoKey(perfil));
+    final conocidos = meta == null
+        ? <dynamic>{}
+        : ((jsonDecode(meta) as Map)['ids'] as List? ?? []).toSet();
+    final remotos = List<Map<String, dynamic>>.from(
+      (copia['registros'] as List).map(
+        (r) => Map<String, dynamic>.from(r as Map),
+      ),
+    );
+    final idsRemotos = remotos.map((r) => r['respaldo_id']).toSet();
+    // Conserva recordatorios nuevos del teléfono. Los ya respaldados se recuperan
+    // desde la copia elegida, sin resucitar los que se eliminaron allí.
+    final registros = locales
+        .where(
+          (r) =>
+              !conocidos.contains(r.respaldoId) &&
+              !idsRemotos.contains(r.respaldoId),
+        )
+        .toList();
+    for (final row in remotos) {
+      registros.add(
+        Recordatorio(
+          id: await _nuevoId(prefs),
+          perfilId: perfil,
+          respaldoId: row['respaldo_id'] as String,
+          tipo: TipoRecordatorio.values.byName(row['tipo'] as String),
+          titulo: row['titulo'] as String,
+          fechaHora: DateTime.parse(row['fecha_hora'] as String),
+          repeticion: RepeticionRecordatorio.values.byName(
+            row['repeticion'] as String,
+          ),
+          completado: row['completado'] == true,
+        ),
+      );
+    }
+    await _escribir(prefs, perfil, registros);
+    await _storage.write(
+      key: _respaldoKey(perfil),
+      value: jsonEncode({
+        'version': copia['version'], 'ids': idsRemotos.toList(),
+        // Se vuelve a comprobar la copia tras mezclar los nuevos del teléfono.
+      }),
+    );
+    for (final local in locales) {
+      await notificaciones.cancelar(local.id);
+    }
   });
 
   Future<void> _importar(

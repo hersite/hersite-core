@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import '../widgets/guia_app_dialog.dart';
+import '../services/api_client.dart';
+import '../services/session_state_service.dart';
+import 'recuperar_cuenta_screen.dart';
 import '../database/local_database.dart';
 import '../models/perfil_gestante.dart';
 import '../models/evaluacion_riesgo.dart';
@@ -36,6 +40,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   int _notificacionesPendientes = 0;
   List<String> _mensajesNotificacion = [];
   bool _actualizandoRecordatorios = false;
+  bool _guiaAbierta = false;
+  final _guiaEmbarazo = GlobalKey();
+  final _guiaSintomas = GlobalKey();
+  final _guiaHistorial = GlobalKey();
+  final _guiaRecordatorios = GlobalKey();
+  final _guiaAprende = GlobalKey();
+  final _guiaPerfil = GlobalKey();
+  final _guiaEmergencia = GlobalKey();
 
   // 🔴 Se eliminó la variable local _notificacionMostradaEnSesion
 
@@ -99,7 +111,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           channelDescription: 'Mensajes al abrir la app',
           importance: Importance.max,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_notificacion_salud',
         );
     const NotificationDetails platformDetails = NotificationDetails(
       android: androidDetails,
@@ -155,12 +167,82 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         _cargando = false;
       });
       await _cargarNotificaciones();
+      if (perfil?.id != null && !_guiaAbierta) {
+        await _mostrarGuia(perfil!.id!);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _cargando = false;
         _error = e.toString();
       });
+    }
+  }
+
+  Future<void> _mostrarGuia(int perfilId, {bool repetir = false}) async {
+    if (_guiaAbierta) return;
+    _guiaAbierta = true;
+    try {
+      if ((!repetir && !await GuiaApp.pendiente(perfilId)) ||
+          !mounted ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
+      final completada = await GuiaAppRecorrido.mostrar(
+        context,
+        pasos: [
+          PasoGuia(
+            objetivo: _guiaEmbarazo,
+            titulo: 'Tu embarazo',
+            texto:
+                'Aquí verás tus semanas de embarazo y la fecha aproximada en que nacerá tu bebé.',
+          ),
+          PasoGuia(
+            objetivo: _guiaSintomas,
+            titulo: '¿Cómo te sientes hoy?',
+            texto:
+                'Toca este botón para responder unas preguntas sobre cómo te sientes. Puedes hacerlo sin internet.',
+          ),
+          PasoGuia(
+            objetivo: _guiaHistorial,
+            titulo: 'Tus evaluaciones',
+            texto:
+                'Aquí puedes volver a ver tus resultados anteriores. Toca una evaluación para leerla completa.',
+          ),
+          PasoGuia(
+            objetivo: _guiaRecordatorios,
+            titulo: 'Tus recordatorios',
+            texto:
+                'Anota aquí tus citas y pastillas. Elige una hora y permite los avisos para que la app te recuerde.',
+          ),
+          PasoGuia(
+            objetivo: _guiaAprende,
+            titulo: 'Aprende a cuidarte',
+            texto:
+                'Aquí encontrarás consejos para tu embarazo y aprenderás a reconocer las señales de alarma.',
+          ),
+          PasoGuia(
+            objetivo: _guiaPerfil,
+            margen: const EdgeInsets.fromLTRB(20, 6, 20, 23),
+            titulo: 'Tus datos y tu PIN',
+            texto:
+                'Aquí puedes revisar tus datos y cambiar tu PIN. Recuerda tu PIN: te servirá para recuperar tu cuenta en otro teléfono.',
+          ),
+          PasoGuia(
+            objetivo: _guiaEmergencia,
+            titulo: 'Si necesitas ayuda urgente',
+            texto:
+                'Este botón abre una llamada de emergencia. Si necesitas ayuda urgente, no esperes a responder las preguntas de la app.',
+          ),
+        ],
+      );
+      if (completada &&
+          mounted &&
+          await SessionStateService.instance.getActiveProfileId() == perfilId) {
+        await GuiaApp.completar(perfilId);
+      }
+    } finally {
+      _guiaAbierta = false;
     }
   }
 
@@ -319,25 +401,43 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                             ),
                           ),
 
-                          Badge(
-                            isLabelVisible: _notificacionesPendientes > 0,
-                            label: Text(
-                              _notificacionesPendientes.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Ver guía de la app',
+                                icon: const Icon(
+                                  Icons.help_outline,
+                                  color: Colors.white,
+                                ),
+                                onPressed: _perfil?.id == null
+                                    ? null
+                                    : () => _mostrarGuia(
+                                        _perfil!.id!,
+                                        repetir: true,
+                                      ),
                               ),
-                            ),
-                            backgroundColor: Colors.redAccent,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.notifications_active,
-                                color: Colors.white,
-                                size: 28,
+                              Badge(
+                                isLabelVisible: _notificacionesPendientes > 0,
+                                label: Text(
+                                  _notificacionesPendientes.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                backgroundColor: Colors.redAccent,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.notifications_active,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                  onPressed: () =>
+                                      _verCentroNotificaciones(context),
+                                ),
                               ),
-                              onPressed: () =>
-                                  _verCentroNotificaciones(context),
-                            ),
+                            ],
                           ),
                         ],
                       ),
@@ -361,6 +461,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       const SizedBox(height: 15),
 
                       Container(
+                        key: _guiaEmbarazo,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
                           color: const Color(0xFF5A845C),
@@ -407,9 +508,53 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
+                        ValueListenableBuilder<int?>(
+                          valueListenable:
+                              ApiClient.instance.requiereRecuperacion,
+                          builder: (_, id, _) => id != _perfil?.id || id == null
+                              ? const SizedBox.shrink()
+                              : Card(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Escribe el PIN que usabas antes para recuperar tu cuenta.',
+                                          style: TextStyle(fontSize: 16),
+                                        ),
+                                        TextButton(
+                                          onPressed: () async {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    RecuperarCuentaScreen(
+                                                      dni: _perfil!.dni,
+                                                    ),
+                                              ),
+                                            );
+                                            if (mounted) _cargarDatosInicio();
+                                          },
+                                          child: const Text(
+                                            'Recuperar mi cuenta',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                        ),
                         Row(
                           children: [
-                            Expanded(flex: 4, child: _tarjetaEmergencia()),
+                            Expanded(
+                              flex: 4,
+                              child: KeyedSubtree(
+                                key: _guiaEmergencia,
+                                child: _tarjetaEmergencia(),
+                              ),
+                            ),
                             const SizedBox(width: 10),
                             Expanded(
                               flex: 5,
@@ -418,23 +563,36 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           ],
                         ),
                         const SizedBox(height: 15),
-                        _tarjetaHistorial(),
+                        KeyedSubtree(
+                          key: _guiaHistorial,
+                          child: _tarjetaHistorial(),
+                        ),
                         const SizedBox(height: 15),
 
                         Row(
                           children: [
                             Expanded(
-                              child: _tarjetaCuadrada(context, 'Recordatorios'),
+                              child: KeyedSubtree(
+                                key: _guiaRecordatorios,
+                                child: _tarjetaCuadrada(
+                                  context,
+                                  'Recordatorios',
+                                ),
+                              ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: _tarjetaCuadrada(context, 'Aprende'),
+                              child: KeyedSubtree(
+                                key: _guiaAprende,
+                                child: _tarjetaCuadrada(context, 'Aprende'),
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 25),
 
                         SizedBox(
+                          key: _guiaSintomas,
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
@@ -516,17 +674,23 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             _cargarDatosInicio();
           }
         },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Inicio',
+          ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.favorite),
             label: 'Historial',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.menu_book),
             label: 'Aprende',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person, key: _guiaPerfil),
+            label: 'Perfil',
+          ),
         ],
       ),
     );
@@ -625,7 +789,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 ),
                 Text(
                   _subtituloUltimaEvaluacion(evaluacion),
-                  style: TextStyle(color: color.withOpacity(0.8), fontSize: 9),
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.8),
+                    fontSize: 9,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -862,7 +1029,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           color: const Color(0xFFEEFFEF),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: const Color(0xFF4C924F).withOpacity(0.3),
+                            color: const Color(
+                              0xFF4C924F,
+                            ).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -882,7 +1051,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                               ),
                             ),
                             const Icon(
-                              Icons.arrow_forward_ios,
+                              Icons.chevron_right,
                               size: 14,
                               color: Color(0xFF4C924F),
                             ),
