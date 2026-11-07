@@ -63,9 +63,16 @@ rollback() {
   trap - ERR INT TERM
   echo 'No se completó la actualización. Restaurando la versión anterior…'
   if (( activated )); then
+    sudo journalctl -u "$service" --since '5 minutes ago' --no-pager -n 160 > "$backup/arranque-fallido.log" 2>&1 || true
     sudo rm -f -- "$override"
     sudo systemctl daemon-reload
-    sudo systemctl restart "$service" || true
+    if sudo systemctl restart "$service"; then
+      "$venv/bin/python" "$source_dir/deploy/esperar_servicio.py" "$public_url" --timeout 180 || {
+        echo 'No se pudo confirmar la disponibilidad de la versión anterior. Revisa el servicio.';
+      }
+    else
+      echo 'No se pudo reiniciar la versión anterior. Revisa el servicio.'
+    fi
   fi
   if (( panel_touched )); then
     sudo install -m 644 -- "$backup/index.html" "$panel/index.html"
@@ -85,15 +92,8 @@ sudo install -m 644 -- "$release/servicio.conf" "$override"
 sudo systemctl daemon-reload
 sudo systemctl restart "$service"
 sudo systemctl is-active --quiet "$service"
-curl --fail --silent --show-error --retry 8 --retry-connrefused --retry-delay 1 --max-time 10 \
-  "$public_url/health" > "$backup/health.json"
-"$venv/bin/python" - "$public_url" <<'PY'
-import json, sys, urllib.request
-with urllib.request.urlopen(sys.argv[1] + '/api/version', timeout=15) as response:
-    version = json.load(response)
-assert version['version'] == '1.1.0', 'El proxy no apunta a la versión nueva.'
-assert version['revision_evaluaciones'] is True
-PY
+echo 'Esperando la disponibilidad del backend y su versión (hasta 180 segundos)…'
+"$venv/bin/python" "$source_dir/deploy/esperar_servicio.py" "$public_url" --version 1.1.0 --timeout 180
 
 # Activa el HTML al final; conserva los assets anteriores para facilitar la vuelta atrás.
 panel_touched=1

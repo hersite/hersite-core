@@ -37,6 +37,11 @@ antes de activar. Conserva el `.env` y reutiliza el entorno Python Linux actual:
 no se añadieron dependencias. No elimina cuentas ni evaluaciones. La tabla de
 revisiones se crea de forma aditiva; no se inventan revisiones ni fechas pasadas.
 
+Tras reiniciar, comprueba tanto `/health` como la versión durante un máximo de
+180 segundos, tolerando errores temporales de conexión y 502/503 durante el
+arranque. No publica el panel hasta que ambas comprobaciones pasan. No basta
+con que systemd indique «active»: Python puede seguir iniciando la aplicación.
+
 Si falla la activación intenta volver al servicio e índice anteriores. No restaura
 automáticamente la BD, para no perder evaluaciones recibidas después del respaldo.
 Si aparece un error, conservar la salida y no borrar archivos ni repetir a ciegas.
