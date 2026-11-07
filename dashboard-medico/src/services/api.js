@@ -27,6 +27,9 @@ async function requestJson(path, options = {}) {
 }
 
 export const api = {
+  marcarEvaluacionRevisada(id) {
+    return requestJson(`/api/evaluaciones/${id}/revision`, { method: 'POST' });
+  },
   crearVinculacion(id) {
     return requestJson(`/api/gestantes/${id}/vinculacion`, { method: 'POST' });
   },

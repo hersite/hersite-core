@@ -31,6 +31,9 @@ import {
 } from 'recharts';
 
 import { api } from '../services/api';
+import { completarMeses } from '../utils/tendencias';
+
+const SIN_FILAS = [];
 
 function riesgoPredominanteTexto(riesgo) {
   if (riesgo === 'alto') return 'Riesgo alto';
@@ -70,8 +73,8 @@ export default function Tendencias() {
     cargarTendencias();
   }, []);
 
-  const factoresAPI = data?.factores_frecuentes || [];
-  const tendenciaMensual = data?.tendencia_mensual || [];
+  const factoresAPI = data?.factores_frecuentes ?? SIN_FILAS;
+  const tendenciaMensual = data?.tendencia_mensual ?? SIN_FILAS;
   const totalEvaluaciones = data?.total_evaluaciones || 0;
   const riesgos = data?.riesgos || { bajo: 0, medio: 0, alto: 0 };
   
@@ -139,7 +142,7 @@ export default function Tendencias() {
   }, [factoresAPI, totalEvaluaciones]);
 
   const dataEvolucionClinica = useMemo(() => {
-    return tendenciaMensual || [];
+    return completarMeses(tendenciaMensual);
   }, [tendenciaMensual]);
 
   const factoresClinicos = useMemo(() => {
@@ -327,11 +330,11 @@ export default function Tendencias() {
               <div className="mb-4">
                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Tendencia Mensual de Clasificación</h3>
                 <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                  Evolución histórica de las evaluaciones según el nivel de riesgo predicho.
+                  Evolución histórica de las evaluaciones según el nivel de riesgo predicho. Los meses sin evaluaciones se muestran en cero.
                 </p>
               </div>
 
-              <div className="min-h-0 w-full flex-1">
+              <div className="min-h-0 w-full flex-1 overflow-x-auto">
                 {dataEvolucionClinica.length === 0 ? (
                   <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-6 text-center">
                     <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
@@ -339,6 +342,7 @@ export default function Tendencias() {
                     </p>
                   </div>
                 ) : (
+                  <div style={{ minWidth: Math.max(640, dataEvolucionClinica.length * 64), height: '100%' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={dataEvolucionClinica} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
@@ -352,14 +356,16 @@ export default function Tendencias() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#334155' : '#f1f5f9'} />
-                      <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <XAxis dataKey="mes" interval={0} angle={-35} textAnchor="end" height={65} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
                       <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
                       <Tooltip contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', borderColor: isDark ? '#1e293b' : '#e2e8f0', color: isDark ? '#f8fafc' : '#0f172a', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                       <Area type="monotone" name="Riesgo Alto" dataKey="alto" stroke="#ef4444" fillOpacity={1} fill="url(#colorAlto)" strokeWidth={2} />
                       <Area type="monotone" name="Riesgo Medio" dataKey="medio" stroke="#f97316" fillOpacity={1} fill="url(#colorMedio)" strokeWidth={2} />
+                      <Area type="monotone" name="Riesgo Bajo" dataKey="bajo" stroke="#16a34a" fill="#16a34a" fillOpacity={0.08} strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
+                  </div>
                 )}
               </div>
             </div>

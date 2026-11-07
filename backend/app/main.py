@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError
 from app.auth_routes import router as auth_router, mobile_patient
+from app.revision_routes import router as revision_router, datos_revision
 from app.security import current_user, require_admin, require_patient, visible_ids
 from app.models import PersonalSalud
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,12 +30,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Riesgo Materno API",
     description="Backend central para sincronización de evaluaciones de riesgo materno.",
-    version="0.1.0",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
 
 app.include_router(auth_router)
+app.include_router(revision_router)
+
+
+@app.get("/api/version")
+def version_publica():
+    return {"version": app.version, "revision_evaluaciones": True}
 
 
 @app.middleware("http")
@@ -135,8 +142,9 @@ def _semanas_actuales(gestante):
     return gestante.semanas_gestacion + days // 7
 
 
-def _evaluacion_to_card(evaluacion: EvaluacionCentral, gestante: Gestante | None):
+def _evaluacion_to_card(evaluacion: EvaluacionCentral, gestante: Gestante | None, session: Session):
     return {
+        **datos_revision(session, evaluacion.id),
         "id": evaluacion.id,
         "server_id": evaluacion.server_id,
         "id_local": evaluacion.id_local,
@@ -292,7 +300,7 @@ def dashboard_resumen(
 
         gestantes_cards.append({
             "gestante": _gestante_to_dict(g),
-            "ultima_evaluacion": _evaluacion_to_card(ultima_eval, g) if ultima_eval else None
+            "ultima_evaluacion": _evaluacion_to_card(ultima_eval, g, session) if ultima_eval else None
         })
 
     return {
@@ -447,7 +455,7 @@ def sistema_estado(
         gestante = None
         if ultima_evaluacion.gestante_id is not None:
             gestante = session.get(Gestante, ultima_evaluacion.gestante_id)
-        ultima_card = _evaluacion_to_card(ultima_evaluacion, gestante)
+        ultima_card = _evaluacion_to_card(ultima_evaluacion, gestante, session)
 
     return {
         "api": {
@@ -592,7 +600,7 @@ def listar_ultimas_evaluaciones(
             gestante = session.get(Gestante, evaluacion.gestante_id)
 
         resultado.append(
-            _evaluacion_to_card(evaluacion, gestante)
+            _evaluacion_to_card(evaluacion, gestante, session)
         )
 
     return resultado
@@ -620,7 +628,7 @@ def obtener_detalle_evaluacion(
         gestante = session.get(Gestante, evaluacion.gestante_id)
 
     return {
-        **_evaluacion_to_card(evaluacion, gestante),
+        **_evaluacion_to_card(evaluacion, gestante, session),
         "perfil_id_local": evaluacion.perfil_id_local,
         "form_data": evaluacion.form_data,
         "probabilidades": evaluacion.probabilidades,
@@ -664,7 +672,7 @@ def listar_evaluaciones_por_gestante(
         "gestante": _gestante_to_dict(gestante),
         "total_evaluaciones": len(evaluaciones),
         "evaluaciones": [
-            _evaluacion_to_card(evaluacion, gestante)
+            _evaluacion_to_card(evaluacion, gestante, session)
             for evaluacion in evaluaciones
         ],
     }

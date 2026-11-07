@@ -1,18 +1,31 @@
-import { probabilidadesModelo } from '../utils/probabilidades';
+import { ordenarTriaje } from '../utils/triaje';
+import EstadoRevision from '../components/EstadoRevision';
 import { esAdminWeb } from '../services/auth';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { AlertTriangle, Search, CheckCircle2, RefreshCw, UserCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
 import { api } from '../services/api';
 
+function getRiskClass(nivelRiesgo) {
+  if (nivelRiesgo === 'Riesgo_Alto' || nivelRiesgo === 'ALTO') return 'danger';
+  if (nivelRiesgo === 'Riesgo_Medio' || nivelRiesgo === 'MEDIO') return 'warn';
+  if (nivelRiesgo === 'Riesgo_Bajo' || nivelRiesgo === 'BAJO') return 'ok';
+  return 'none';
+}
+
 export default function Dashboard() {
   const [listaGestantes, setListaGestantes] = useState([]);
   const [stats, setStats] = useState({ total: 0, alto: 0, medio: 0, bajo: 0 }); // NUEVO: Contadores dinámicos
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [selectedDetail, setSelectedDetail] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detalleCargado, setSelectedDetail] = useState(null);
+  const selectedItem = listaGestantes.find((item) => item.gestante.id === selectedId)
+    ?? listaGestantes[0] ?? null;
+  const evaluacionId = selectedItem?.ultima_evaluacion?.id;
+  const selectedDetail = evaluacionId && detalleCargado?.id === evaluacionId ? detalleCargado : null;
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [detalleEnCarga, setDetalleEnCarga] = useState(null);
+  const detailLoading = Boolean(evaluacionId && detalleEnCarga === evaluacionId);
   const [error, setError] = useState(null);
 
   const isDark = localStorage.getItem('theme') === 'oscuro';
@@ -30,13 +43,6 @@ export default function Dashboard() {
     return { bg: 'bg-slate-50 dark:bg-slate-800/50', text: 'text-slate-500 dark:text-slate-400', border: 'border-slate-200 dark:border-slate-700', bar: 'bg-slate-300 dark:bg-slate-600' };
   };
   
-  const getRiskClass = (nivelRiesgo) => {
-    if (nivelRiesgo === 'Riesgo_Alto' || nivelRiesgo === 'ALTO') return 'danger';
-    if (nivelRiesgo === 'Riesgo_Medio' || nivelRiesgo === 'MEDIO') return 'warn';
-    if (nivelRiesgo === 'Riesgo_Bajo' || nivelRiesgo === 'BAJO') return 'ok';
-    return 'none';
-  };
-
   const getInitials = (nombre) => {
     if (!nombre) return 'G';
     return nombre.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0]?.toUpperCase()).join('');
@@ -50,14 +56,6 @@ export default function Dashboard() {
     } catch {
       return fechaIso;
     }
-  };
-
-  const getProbabilidad = (detalle, evalBase) => {
-    const nivel = detalle?.nivel_riesgo || evalBase?.nivel_riesgo;
-    const probs = probabilidadesModelo(detalle?.probabilidades ?? evalBase?.probabilidades);
-    if (!probs) return null;
-    const index = nivel === 'Riesgo_Alto' ? 2 : nivel === 'Riesgo_Medio' ? 1 : 0;
-    return Math.round(probs[index] * 100);
   };
 
   const leerNumero = (data, campo) => {
@@ -151,7 +149,7 @@ export default function Dashboard() {
     return equivalencias[limpio] || limpio;
   };
 
-  const reproducirAlertaSiEsNecesario = (gestantesActivas) => {
+  const reproducirAlertaSiEsNecesario = useCallback((gestantesActivas) => {
     const alertaActivada = localStorage.getItem('alertaSonora') !== 'false';
     if (!alertaActivada) return;
 
@@ -178,9 +176,9 @@ export default function Dashboard() {
         });
       }
     }
-  };
+  }, []);
 
-  const chartData = useMemo(() => {
+  const chartData = (() => {
     const form = getFormData(selectedDetail, selectedItem?.ultima_evaluacion);
 
     const data = [];
@@ -202,34 +200,43 @@ export default function Dashboard() {
     }
 
     return data;
-  }, [selectedDetail, selectedItem]);
+  })();
 
-  const cargarDetalle = async (item) => {
-    if (!item) return;
-    setSelectedItem(item);
-    
-    if (item.ultima_evaluacion?.id) {
-      setDetailLoading(true);
-      try {
-        const detalle = await api.getEvaluacionDetalle(item.ultima_evaluacion.id);
-        setSelectedDetail(detalle);
-      } catch (err) {
-        console.error(err);
-        setSelectedDetail(null);
-      } finally {
-        setDetailLoading(false);
-      }
-    } else {
-      setSelectedDetail(null);
-    }
+  const cargarDetalle = (item) => {
+    setSelectedId(item?.gestante.id ?? null);
   };
 
+  const actualizarRevision = (id, revision) => {
+    setListaGestantes((filas) => filas.map((fila) => fila.ultima_evaluacion?.id === id
+      ? { ...fila, ultima_evaluacion: { ...fila.ultima_evaluacion, ...revision } } : fila));
+    setSelectedDetail((detalle) => detalle?.id === id ? { ...detalle, ...revision } : detalle);
+  };
+
+  useEffect(() => {
+    let cancelado = false;
+    async function actualizarDetalle() {
+      if (!evaluacionId) return;
+      setDetalleEnCarga(evaluacionId);
+      try {
+        const detalle = await api.getEvaluacionDetalle(evaluacionId);
+        if (!cancelado) setSelectedDetail(detalle);
+      } catch (err) {
+        console.error(err);
+        if (!cancelado) setSelectedDetail(null);
+      } finally {
+        if (!cancelado) setDetalleEnCarga(null);
+      }
+    }
+    actualizarDetalle();
+    return () => { cancelado = true; };
+  }, [evaluacionId]);
+
   // NUEVO: Función para procesar y filtrar datos puros
-  const procesarDatos = (data) => {
+  const procesarDatos = useCallback((data) => {
     const ultimasRaw = data.ultimas_gestantes || [];
     
     // 1. Filtramos estrictamente a las que están activas
-    const activas = ultimasRaw.filter(item => item.gestante?.activo !== false);
+    const activas = ordenarTriaje(ultimasRaw);
     
     // 2. Recalculamos los contadores del header basándonos SOLO en las activas
     let cAlto = 0, cMedio = 0, cBajo = 0;
@@ -243,9 +250,9 @@ export default function Dashboard() {
     setStats({ total: activas.length, alto: cAlto, medio: cMedio, bajo: cBajo });
     setListaGestantes(activas);
     return activas;
-  };
+  }, []);
 
-  const cargarDashboard = async (fondo = false) => {
+  const cargarDashboard = useCallback(async (fondo = false) => {
     if (!fondo) {
       setLoading(true);
       setError(null);
@@ -257,19 +264,13 @@ export default function Dashboard() {
       
       reproducirAlertaSiEsNecesario(activas);
 
-      if (!fondo && activas.length > 0) {
-        await cargarDetalle(activas[0]);
-      } else if (!fondo) {
-        setSelectedItem(null);
-        setSelectedDetail(null);
-      }
     } catch (err) {
       console.error(err);
       if (!fondo) setError(err.message || 'No se pudo conectar con el backend.');
     } finally {
       if (!fondo) setLoading(false);
     }
-  };
+  }, [procesarDatos, reproducirAlertaSiEsNecesario]);
   
   useEffect(() => {
     let cancelado = false;
@@ -281,20 +282,7 @@ export default function Dashboard() {
         if (cancelado) return;
 
         const activas = procesarDatos(data);
-        let detalleInicial = null;
-
-        if (activas.length > 0 && activas[0].ultima_evaluacion?.id) {
-          try {
-            detalleInicial = await api.getEvaluacionDetalle(activas[0].ultima_evaluacion.id);
-          } catch (err) {
-            console.error(err);
-          }
-        }
-
         if (cancelado) return;
-
-        setSelectedItem(activas.length > 0 ? activas[0] : null);
-        setSelectedDetail(detalleInicial);
         setError(null);
         
         reproducirAlertaSiEsNecesario(activas);
@@ -318,7 +306,7 @@ export default function Dashboard() {
       cancelado = true;
       clearInterval(intervalo);
     };
-  }, []);
+  }, [cargarDashboard, procesarDatos, reproducirAlertaSiEsNecesario]);
 
   const gestantesFiltradas = listaGestantes.filter((item) => {
     // Ya no filtramos el activo aquí porque listaGestantes YA está limpia
@@ -328,10 +316,10 @@ export default function Dashboard() {
   });
 
   const gestante = selectedItem?.gestante;
-  const evalActiva = selectedDetail || selectedItem?.ultima_evaluacion;
+  const evalActiva = selectedItem?.ultima_evaluacion
+    ? { ...selectedDetail, ...selectedItem.ultima_evaluacion } : null;
   const riskClass = getRiskClass(evalActiva?.nivel_riesgo);
   const colors = getRiskColors(riskClass);
-  const probabilidad = getProbabilidad(selectedDetail, evalActiva);
   const formActivo = getFormData(selectedDetail, evalActiva);
   const hayPresionActual = tienePresionActualRegistrada(formActivo);
   const presionSistolicaTexto = getPresion(selectedDetail, evalActiva, 'Presion_Sistolica');
@@ -407,6 +395,7 @@ export default function Dashboard() {
         {/* SIDEBAR RESPONSIVE */}
         <div className="flex w-full md:w-72 shrink-0 flex-col border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 max-h-[35vh] md:max-h-none md:h-full transition-colors duration-300">
           <div className="border-b border-slate-100 dark:border-slate-800 px-4 md:px-3 py-3 md:py-4 shrink-0">
+            <p className="mb-2 text-[10px] text-slate-500 dark:text-slate-400">Riesgo alto primero; luego, evaluación más reciente.</p>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-[10px] text-slate-400 dark:text-slate-500" />
               <input
@@ -480,12 +469,7 @@ export default function Dashboard() {
                   </div>
                   
                   {evalActiva && (
-                    <div className="mt-3 sm:mt-0 sm:ml-auto text-center shrink-0">
-                      <div className={`text-3xl sm:text-4xl font-black ${riskClass === 'danger' ? 'text-red-500 dark:text-red-400' : riskClass === 'warn' ? 'text-amber-500 dark:text-amber-400' : 'text-green-600 dark:text-green-500'}`}>
-                        {probabilidad === null ? "No disponible" : `${probabilidad}%`}
-                      </div>
-                      <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Prob. clase</div>
-                    </div>
+                    <EstadoRevision key={evalActiva.id} evaluacion={evalActiva} onRevisada={actualizarRevision} />
                   )}
                 </div>
 

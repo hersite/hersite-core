@@ -77,6 +77,14 @@ class PersonalSalud(SQLModel, table=True):
     activo: bool = True
 
 
+class RevisionEvaluacion(SQLModel, table=True):
+    # Una única revisión explícita por evaluación; no se sobrescribe su autoría.
+    evaluacion_id: int = Field(primary_key=True, foreign_key="evaluacioncentral.id")
+    personal_id: int = Field(foreign_key="personalsalud.id")
+    profesional_nombre: str
+    revisado_en: str
+
+
 class RespaldoRecordatorios(SQLModel, table=True):
     gestante_id: int = Field(primary_key=True, foreign_key="gestante.id")
     version: int = 0

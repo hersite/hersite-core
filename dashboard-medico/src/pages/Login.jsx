@@ -67,11 +67,11 @@ export default function Login() {
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white shadow-lg">
                 <img
                   src={logoTesis}
-                  alt="logo_tesis"
+                  alt="Logo de Nuvia"
                   className="h-10 w-10 object-contain"
                 />
               </div>
-              <span className="text-4xl font-black tracking-tight text-white drop-shadow-sm">hersite</span>
+              <span className="text-4xl font-black tracking-tight text-white drop-shadow-sm">Nuvia</span>
             </div>
 
             <h1 className="mb-6 font-serif text-3xl font-bold leading-tight md:text-4xl text-white">

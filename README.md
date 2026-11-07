@@ -18,3 +18,6 @@ La dirección pública del servicio está en `config/google_cloud.json`; no cont
 
 Consultar [recuperación de cuentas y actualización del servidor](backend/RECUPERACION_CUENTAS.md). Conservar el `.env` y la base de datos de la VM: un commit o un APK no actualizan el servidor automáticamente. No versionar credenciales, entornos virtuales, bases de datos ni APK.
 
+El panel 1.1.0 incorpora revisión explícita de evaluaciones, sin modificar la app
+Android. Consulta la [actualización de la VM desde Git](deploy/LEEME.md).
+

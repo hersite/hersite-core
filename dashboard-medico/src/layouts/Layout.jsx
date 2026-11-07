@@ -72,7 +72,7 @@ export default function Layout() {
             className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white object-contain p-0.5 shadow-sm"
           />
           <div>
-            <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white">hersite</h1>
+            <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white">Nuvia</h1>
             <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Triaje Materno</p>
           </div>
         </div>
