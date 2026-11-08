@@ -6,7 +6,7 @@ umask 077
 base=/home/jpierre1311
 service=hersite-backend.service
 panel=/var/www/hersite
-override=/etc/systemd/system/hersite-backend.service.d/zzzz-nuvia-1.1.0.conf
+override=/etc/systemd/system/hersite-backend.service.d/zzzz-nuvia-current.conf
 public_url=https://nuvia-136-64-236-164.sslip.io
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 
@@ -17,7 +17,7 @@ source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 case "$source_dir" in "$base"/*) ;; *) echo 'El repositorio debe estar dentro de /home/jpierre1311.'; exit 1;; esac
 [[ "$source_dir" =~ ^[a-zA-Z0-9_./-]+$ ]] || { echo 'Usa una ruta sin espacios ni caracteres especiales.'; exit 1; }
 sudo -v
-sudo test ! -e "$override" || { echo 'Esta versión ya tiene un servicio configurado. No se sobrescribió.'; exit 1; }
+sudo test ! -L "$override" || { echo 'La configuración del servicio es un enlace inesperado; se canceló.'; exit 1; }
 current_backend=$(systemctl show --value -p WorkingDirectory "$service")
 current_backend=$(realpath -e -- "$current_backend")
 case "$current_backend" in "$base"/*/backend) ;; *) echo 'Directorio del servicio inesperado; se canceló.'; exit 1;; esac
@@ -52,6 +52,12 @@ echo 'Generando respaldos privados antes de activar…'
 sudo -u postgres pg_dump -Fc riesgo_materno_db > "$backup/postgresql.dump"
 pg_restore --list "$backup/postgresql.dump" > /dev/null
 sudo systemctl cat "$service" > "$backup/servicio.txt"
+override_existed=0
+if sudo test -e "$override"; then
+  sudo test -f "$override" || { echo 'La configuración del servicio no es un archivo regular; se canceló.'; exit 1; }
+  sudo cat "$override" > "$backup/override-anterior.conf"
+  override_existed=1
+fi
 sudo tar --dereference -czf "$backup/panel.tar.gz" -C /var/www hersite
 sudo cat "$panel/index.html" > "$backup/index.html"
 tar --exclude=.venv --exclude=__pycache__ -czf "$backup/backend.tar.gz" -C "$current_backend" .
@@ -64,7 +70,11 @@ rollback() {
   echo 'No se completó la actualización. Restaurando la versión anterior…'
   if (( activated )); then
     sudo journalctl -u "$service" --since '5 minutes ago' --no-pager -n 160 > "$backup/arranque-fallido.log" 2>&1 || true
-    sudo rm -f -- "$override"
+    if (( override_existed )); then
+      sudo install -m 644 -- "$backup/override-anterior.conf" "$override"
+    else
+      sudo rm -f -- "$override"
+    fi
     sudo systemctl daemon-reload
     if sudo systemctl restart "$service"; then
       "$venv/bin/python" "$source_dir/deploy/esperar_servicio.py" "$public_url" --timeout 180 || {
@@ -85,11 +95,14 @@ trap 'rollback 130' INT
 trap 'rollback 143' TERM
 
 printf '[Service]\nWorkingDirectory=%s/backend\nExecStart=\nExecStart=%s/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1\n' \
-  "$release" "$venv" > "$release/servicio.conf"
+  "$release" "$venv" > "$backup/servicio-nuevo.conf"
 sudo install -d -m 755 -- /etc/systemd/system/hersite-backend.service.d
 activated=1
-sudo install -m 644 -- "$release/servicio.conf" "$override"
+sudo install -m 644 -- "$backup/servicio-nuevo.conf" "$override"
 sudo systemctl daemon-reload
+[[ $(systemctl show --value -p WorkingDirectory "$service") == "$release/backend" ]] || {
+  echo 'Otra configuración del servicio impide activar esta versión.'; false;
+}
 sudo systemctl restart "$service"
 sudo systemctl is-active --quiet "$service"
 echo 'Esperando la disponibilidad del backend y su versión (hasta 180 segundos)…'

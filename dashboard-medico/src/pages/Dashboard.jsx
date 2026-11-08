@@ -1,4 +1,5 @@
 import { ordenarTriaje } from '../utils/triaje';
+import { enmascararDni } from '../utils/privacidad';
 import EstadoRevision from '../components/EstadoRevision';
 import { esAdminWeb } from '../services/auth';
 import { useCallback, useEffect, useState, useRef } from 'react';
@@ -461,7 +462,7 @@ export default function Dashboard() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-slate-800 dark:text-white">{gestante?.nombre || 'Gestante sin nombre'}</h3>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      DNI: {gestante?.dni || '--'} · {gestante?.edad_materna ?? '--'} años · {gestante?.semanas_gestacion ?? '--'} sem. gestación
+                      DNI: {enmascararDni(gestante?.dni)} · {gestante?.edad_materna ?? '--'} años · {gestante?.semanas_gestacion ?? '--'} sem. gestación
                     </p>
                     {evalActiva && (
                       <p className="mt-1 sm:mt-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">Última evaluación: {formatFecha(evalActiva.fecha_hora)}</p>

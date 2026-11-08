@@ -1,4 +1,5 @@
 import { probabilidadesModelo } from '../utils/probabilidades';
+import { enmascararDni } from '../utils/privacidad';
 import { esAdminWeb } from '../services/auth';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -442,7 +443,7 @@ export default function Gestantes() {
                       <tr key={g.id} className={`transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/40 ${!g.activo ? 'opacity-70 grayscale-[30%]' : ''}`}>
                         <td className="px-6 py-4">
                           <span className="block text-xs font-bold text-slate-700 dark:text-slate-200">{g.nombre}</span>
-                          <span className="mt-0.5 block font-mono text-[10px] text-slate-400 dark:text-slate-500">DNI: {g.dni || '--'}</span>
+                          <span className="mt-0.5 block font-mono text-[10px] text-slate-400 dark:text-slate-500">DNI: {enmascararDni(g.dni)}</span>
                         </td>
 
                         <td className="px-6 py-4 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
@@ -543,7 +544,7 @@ export default function Gestantes() {
               <div className="flex items-center gap-3">
                 <h2 className="font-serif text-xl font-bold text-slate-800 dark:text-slate-100">{seleccionada.nombre}</h2>
                 <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 font-mono text-xs text-slate-600 dark:text-slate-400">
-                  DNI {seleccionada.dni || '--'}
+                  DNI {enmascararDni(seleccionada.dni)}
                 </span>
                 {/* Etiqueta visual si está dada de alta */}
                 {!seleccionada.activo && (

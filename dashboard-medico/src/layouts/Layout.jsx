@@ -33,11 +33,13 @@ export default function Layout() {
 
   useEffect(() => {
     let cancelado = false;
+    let ultimaSolicitud = 0;
 
     async function cargarEstado() {
+      const solicitud = ++ultimaSolicitud;
       try {
         const response = await api.getSistemaEstado();
-        if (cancelado) return;
+        if (cancelado || solicitud !== ultimaSolicitud) return;
         setEstadoSistema(response);
       } catch (err) {
         if (cancelado) return;
@@ -46,15 +48,17 @@ export default function Layout() {
     }
 
     cargarEstado();
+    window.addEventListener('nuvia:revision-actualizada', cargarEstado);
     const intervalId = window.setInterval(cargarEstado, 30000);
 
     return () => {
       cancelado = true;
+      window.removeEventListener('nuvia:revision-actualizada', cargarEstado);
       window.clearInterval(intervalId);
     };
   }, []);
 
-  const totalEvaluaciones = estadoSistema?.resumen?.total_evaluaciones ?? 0;
+  const porRevisar = estadoSistema?.resumen?.total_por_revisar;
   const totalGestantes = estadoSistema?.resumen?.total_gestantes ?? 0;
   const totalAlto = estadoSistema?.resumen?.riesgos?.alto ?? 0;
 
@@ -179,9 +183,9 @@ export default function Layout() {
                 <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">{totalGestantes}</p>
                 <p className="text-[8px] font-bold uppercase text-slate-400 dark:text-slate-500">Gest.</p>
               </div>
-              <div className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-900 p-1.5 shadow-sm transition-colors">
-                <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">{totalEvaluaciones}</p>
-                <p className="text-[8px] font-bold uppercase text-slate-400 dark:text-slate-500">Eval.</p>
+              <div title="Gestantes activas cuya última evaluación aún no tiene una revisión registrada." className="rounded-lg border border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-900 p-1.5 shadow-sm transition-colors">
+                <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">{porRevisar ?? '—'}</p>
+                <p className="text-[8px] font-bold uppercase text-slate-400 dark:text-slate-500">Por revisar</p>
               </div>
               <div className="rounded-lg border border-red-100 dark:border-red-900/30 bg-white dark:bg-slate-900 p-1.5 shadow-sm transition-colors">
                 <p className="text-[11px] font-black text-red-600 dark:text-red-500">{totalAlto}</p>

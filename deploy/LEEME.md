@@ -19,6 +19,7 @@ pertenece al mismo repositorio y conserva intacta la instalación anterior y sus
 configuraciones locales; no requiere subir paquetes comprimidos.
 
 ```bash
+(
 set -e
 cd /home/jpierre1311/hersite-core
 git fetch origin her
@@ -26,6 +27,7 @@ version=$(git rev-parse --short origin/her)
 destino="/home/jpierre1311/nuvia-panel-$version"
 git worktree add --detach "$destino" origin/her
 bash "$destino/deploy/actualizar_vm.sh"
+)
 ```
 
 No ejecutar `git pull`, `reset` ni `clean` sobre la carpeta antigua de la VM sin
@@ -36,6 +38,11 @@ aisladas y respalda PostgreSQL, el código/configuración privada, servicio y pa
 antes de activar. Conserva el `.env` y reutiliza el entorno Python Linux actual:
 no se añadieron dependencias. No elimina cuentas ni evaluaciones. La tabla de
 revisiones se crea de forma aditiva; no se inventan revisiones ni fechas pasadas.
+
+Permite actualizaciones sucesivas: guarda y reemplaza únicamente el archivo de
+configuración de systemd que administra Nuvia. Si falla, restaura la configuración
+anterior. Mantiene los archivos de servicio temporales dentro del respaldo privado,
+no como archivos nuevos sin seguimiento en el repositorio desplegado.
 
 Tras reiniciar, comprueba tanto `/health` como la versión durante un máximo de
 180 segundos, tolerando errores temporales de conexión y 502/503 durante el

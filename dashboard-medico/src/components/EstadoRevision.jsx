@@ -28,6 +28,7 @@ export default function EstadoRevision({ evaluacion, onRevisada }) {
     try {
       const resultado = await api.marcarEvaluacionRevisada(evaluacion.id);
       onRevisada(evaluacion.id, resultado);
+      window.dispatchEvent(new Event('nuvia:revision-actualizada'));
     } catch (err) {
       setError(err.message || 'No se pudo guardar la revisión. Inténtalo otra vez.');
     } finally {

@@ -108,3 +108,52 @@ class RevisionTests(unittest.TestCase):
         with Session(self.engine) as db:
             self.assertEqual(len(db.exec(select(EvaluacionCentral)).all()), 2)
             self.assertEqual(db.exec(select(RevisionEvaluacion)).all(), [])
+
+    def resumen_activo(self, usuario=1):
+        response = self.client.get('/api/sistema/estado', headers=self.web(usuario))
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()['resumen']
+
+    def test_pending_counter_decreases_on_review_without_changing_high_risk(self):
+        self.assertEqual(self.resumen_activo()['total_por_revisar'], 1)
+        self.assertEqual(self.resumen_activo(3)['total_por_revisar'], 2)
+        self.client.post('/api/evaluaciones/1/revision', headers=self.web())
+        resumen = self.resumen_activo()
+        self.assertEqual(resumen['total_por_revisar'], 0)
+        self.assertEqual(resumen['riesgos']['alto'], 1)
+        self.assertEqual(resumen['total_evaluaciones'], 1)
+
+    def test_pending_counter_ignores_older_evaluations_and_counts_each_patient_once(self):
+        self.client.post('/api/evaluaciones/1/revision', headers=self.web())
+        with Session(self.engine) as db:
+            db.add(EvaluacionCentral(id=3, server_id='srv_old', id_local='old', gestante_id=1,
+                perfil_id_local=1, fecha_hora='2026-10-01T12:00:00+00:00', form_data={},
+                sintomas_detectados=[], nivel_riesgo='Riesgo_Alto', mensaje='Anterior'))
+            db.commit()
+        self.assertEqual(self.resumen_activo()['total_por_revisar'], 0)
+        with Session(self.engine) as db:
+            for i in [4, 5]:
+                db.add(EvaluacionCentral(id=i, server_id=f'srv_new_{i}', id_local=f'new-{i}',
+                    gestante_id=1, perfil_id_local=1, fecha_hora='2026-11-08T12:00:00+00:00',
+                    form_data={}, sintomas_detectados=[], nivel_riesgo='Riesgo_Alto', mensaje='Nueva'))
+            db.commit()
+        self.assertEqual(self.resumen_activo()['total_por_revisar'], 1)
+        self.client.post('/api/evaluaciones/5/revision', headers=self.web())
+        self.assertEqual(self.resumen_activo()['total_por_revisar'], 0)
+
+    def test_pending_counter_excludes_inactive_unassigned_and_patients_without_evaluations(self):
+        with Session(self.engine) as db:
+            db.add_all([Gestante(id=3, dni='90000003', activo=False),
+                        Gestante(id=4, dni='90000004')])
+            db.commit()
+            db.add_all([AccesoGestante(personal_id=1, gestante_id=3),
+                        AccesoGestante(personal_id=1, gestante_id=4)])
+            db.add(EvaluacionCentral(id=3, server_id='srv_inactive', id_local='inactive',
+                gestante_id=3, perfil_id_local=1, fecha_hora='2026-11-08T12:00:00+00:00',
+                form_data={}, sintomas_detectados=[], nivel_riesgo='Riesgo_Alto', mensaje='Inactiva'))
+            db.commit()
+        resumen = self.resumen_activo()
+        self.assertEqual(resumen['total_gestantes'], 2)
+        self.assertEqual(resumen['total_por_revisar'], 1)
+        self.assertEqual(self.resumen_activo(3)['total_por_revisar'], 2)
+        self.assertEqual(self.resumen_activo(2)['total_por_revisar'], 0)

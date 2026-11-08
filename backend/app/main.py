@@ -424,6 +424,7 @@ def sistema_estado(
     total_medio = 0
     total_alto = 0
     total_evaluaciones = 0
+    total_por_revisar = 0
 
     # 2. Contamos SOLO la última evaluación de las activas
     for g in gestantes_activas:
@@ -436,6 +437,8 @@ def sistema_estado(
 
         if ultima_eval:
             total_evaluaciones += 1
+            if datos_revision(session, ultima_eval.id)["estado_revision"] == "por_revisar":
+                total_por_revisar += 1
             if ultima_eval.nivel_riesgo == "Riesgo_Bajo":
                 total_bajo += 1
             elif ultima_eval.nivel_riesgo == "Riesgo_Medio":
@@ -485,6 +488,7 @@ def sistema_estado(
         "resumen": {
             "total_gestantes": len(gestantes_activas),
             "total_evaluaciones": total_evaluaciones,
+            "total_por_revisar": total_por_revisar,
             "riesgos": {
                 "bajo": total_bajo,
                 "medio": total_medio,
